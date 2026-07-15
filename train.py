@@ -18,9 +18,9 @@ def run_epoch(model, loader, criterion, device, optimizer=None):
 
     total_loss, correct, total = 0.0, 0, 0
     with torch.set_grad_enabled(is_train):
-        for x, y in loader:
+        for x, lengths, y in loader:
             x, y = x.to(device), y.to(device)
-            probs = model(x)
+            probs = model(x, lengths)
             loss = criterion(probs, y)
 
             if is_train:

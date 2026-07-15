@@ -94,7 +94,12 @@ class ToxicChatDataset(Dataset):
     def __init__(self, df: pd.DataFrame, vocab: Vocab, max_len: int = config.MAX_LEN):
         self.vocab = vocab
         self.max_len = max_len
-        self.encoded = [vocab.encode(clean_text(t), max_len) for t in df["text"]]
+        token_lists = [clean_text(t) for t in df["text"]]
+        self.lengths = np.asarray(
+            [max(1, min(len(tokens), max_len)) for tokens in token_lists],
+            dtype=np.int64,
+        )
+        self.encoded = [vocab.encode(tokens, max_len) for tokens in token_lists]
         self.labels = df["label"].to_numpy(dtype=np.float32)
 
     def __len__(self) -> int:
@@ -102,8 +107,9 @@ class ToxicChatDataset(Dataset):
 
     def __getitem__(self, idx: int):
         x = torch.from_numpy(self.encoded[idx])
+        length = torch.tensor(self.lengths[idx], dtype=torch.long)
         y = torch.tensor(self.labels[idx], dtype=torch.float32)
-        return x, y
+        return x, length, y
 
 
 def _split(df: pd.DataFrame):

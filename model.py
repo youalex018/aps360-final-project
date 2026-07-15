@@ -1,6 +1,7 @@
 """LSTM classifier for binary toxic-chat detection."""
 import torch
 import torch.nn as nn
+from torch.nn.utils.rnn import pack_padded_sequence
 
 import config
 
@@ -30,10 +31,16 @@ class ToxicChatLSTM(nn.Module):
         self.fc = nn.Linear(hidden_dim, 1)
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, lengths: torch.Tensor) -> torch.Tensor:
         embedded = self.embedding(x)
-        _, (hidden, _) = self.lstm(embedded)
-        # hidden[-1] is the final layer's last-step state: the sequence summary.
+        # Packing prevents right-padding from overwriting the message summary.
+        packed = pack_padded_sequence(
+            embedded,
+            lengths.cpu(),
+            batch_first=True,
+            enforce_sorted=False,
+        )
+        _, (hidden, _) = self.lstm(packed)
         out = self.fc(self.dropout(hidden[-1]))
         # Squeeze the singleton output dim so probs align with [batch] labels.
         return self.sigmoid(out).squeeze(-1)

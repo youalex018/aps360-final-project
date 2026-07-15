@@ -21,7 +21,8 @@ def make_text_label_frame(raw_df: pd.DataFrame) -> pd.DataFrame:
     df = raw_df.rename(columns={SOURCE_TEXT_COL: "text"}).copy()
     df = df[df["text"].notna() & df[SOURCE_LABEL_COL].notna()]
     df["text"] = df["text"].astype(str).str.strip()
-    df = df[df["text"].ne("")]
+    # Keep only rows that can produce at least one token under clean_text().
+    df = df[df["text"].str.contains(r"[A-Za-z0-9]", regex=True)]
     df["label"] = (df[SOURCE_LABEL_COL] == "offender").astype(int)
     return df[OUTPUT_COLUMNS]
 
