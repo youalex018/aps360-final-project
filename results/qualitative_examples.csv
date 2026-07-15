@@ -1,0 +1,5 @@
+category,text,label,lstm_probability,lstm_prediction,svm_margin,svm_prediction,comment
+slang success,12 min to ff?,0,0.088,0,-0.668,0,Both models handle game-specific language.
+LSTM false positive,yi feed talon feed,0,0.995,1,0.160,1,A benign message receives a high toxicity probability.
+LSTM false negative,olaf is bronze hahaha,1,0.027,0,-0.677,0,The sequential model misses an expert-labelled toxic message.
+SVM-only success,or brain afk,1,0.290,0,0.623,1,Bag-of-words succeeds where the LSTM fails.

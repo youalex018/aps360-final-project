@@ -8,8 +8,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 TRIBUNAL_RAW_PATH = ROOT / "data" / "tribunal" / "chatlogs.csv"
 TRIBUNAL_PREPARED_PATH = ROOT / "data" / "tribunal" / "tribunal_chat_100k_balanced.csv"
-DATA_PATH = TRIBUNAL_PREPARED_PATH
+L2DTNH_RAW_PATH = ROOT / "data" / "l2dtnh" / "l2dtnh_english.csv"
+L2DTNH_PREPARED_PATH = ROOT / "data" / "l2dtnh" / "l2dtnh_prepared.csv"
+DATA_PATH = L2DTNH_PREPARED_PATH
 CKPT_PATH = ROOT / "checkpoints" / "best_model.pt"
+RESULTS_DIR = ROOT / "results"
+REPORT_FIGURES_DIR = ROOT / "report" / "progress" / "figures"
 SUBSAMPLE_SIZE = 100_000
 
 # Sequence shaping. Chat lines are short, so a small MAX_LEN avoids padding the

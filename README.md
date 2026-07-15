@@ -19,30 +19,43 @@ pip install -r requirements.txt
 
 ## Data
 
-Training uses a prepared Tribunal CSV at
-`data/tribunal/tribunal_chat_100k_balanced.csv` with two columns:
-
-- `text`: raw chat message
-- `label`: `0` = safe, `1` = toxic
-
-Create it from `data/tribunal/chatlogs.csv`:
+Model development uses the expert-annotated English L2DTnH corpus from
+[Ave et al. (2026)](https://github.com/irdin-pekaric/esorics26_toxicity).
+Download
+`model_creation/1_dataset/2_16000_chatlogs_english_only.csv` to
+`data/l2dtnh/l2dtnh_english.csv`, then run:
 
 ```bash
-python prepare_tribunal.py
+python prepare_l2dtnh.py
 ```
 
-The prep script keeps only `message` and `association_to_offender`, maps
-`offender` messages to `1`, maps all other messages to `0`, then writes a
-balanced 100k-row sample. `data/tribunal/` is gitignored, so upload the prepared
-CSV to Colab/Drive or regenerate it there from the raw CSV.
+The script writes `data/l2dtnh/l2dtnh_prepared.csv` with:
+
+- `raw_text` and normalized `text`
+- expert `label`: `0` = non-toxic, `1` = toxic
+- `group_id`: source chat-log identifier
+- fixed `split`: approximately 70/15/15 by complete chat log
+
+It removes token-empty rows and normalized texts carrying contradictory labels,
+then saves a processing audit to `results/data_audit.json`. Complete chat logs
+never cross splits.
+
+`prepare_tribunal.py` preserves the original 100k offender-role proxy experiment
+for comparison, but those labels identify who spoke rather than whether each
+message is toxic and are no longer used for model development.
 
 ## Run
 
 ```bash
-python prepare_tribunal.py  # one-time local/Colab data preparation
-python train.py        # train the LSTM, save best weights, print test accuracy
-python baseline.py     # train TF-IDF + SVM baseline, print test accuracy
+python prepare_l2dtnh.py  # clean, audit, and create grouped splits
+python baseline.py        # class-balanced TF-IDF + SVM metrics/predictions
+python train.py           # weighted LSTM training, checkpoint, full metrics
+python generate_report_assets.py
 ```
+
+Small result files are written to `results/`; generated report figures are
+written to `report/progress/figures/`. The untouched final-data procedure is in
+`FINAL_TEST_PROTOCOL.md`.
 
 For GPU training, open `colab_train.ipynb` in Google Colab, enable a GPU runtime,
 mount Drive, and run the notebook cells.
@@ -57,4 +70,6 @@ mount Drive, and run the notebook cells.
 | `train.py` | Training/validation loops with best-model checkpointing. |
 | `baseline.py` | scikit-learn TF-IDF + SVM baseline. |
 | `prepare_tribunal.py` | Converts raw Tribunal chat logs into a balanced `text,label` CSV. |
+| `prepare_l2dtnh.py` | Cleans expert labels, audits data quality, and assigns grouped splits. |
+| `generate_report_assets.py` | Generates report plots, diagrams, and qualitative examples. |
 | `colab_train.ipynb` | Colab workflow for GPU training and baseline comparison. |

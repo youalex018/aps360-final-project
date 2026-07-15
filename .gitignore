@@ -20,8 +20,9 @@ env/
 # ML artifacts (regenerate with train.py)
 checkpoints/
 
-# Local data (large Tribunal corpus; keep data/example/)
+# Local data (large/source corpora)
 data/tribunal/
+data/l2dtnh/
 
 # IDE / editor
 .idea/
@@ -30,3 +31,5 @@ data/tribunal/
 # Cursor (local agent rules and choices log)
 .cursor/
 PROJECT_CHOICES.md
+FINAL_TEST_PROTOCOL.md
+reports/

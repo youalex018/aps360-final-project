@@ -29,7 +29,6 @@ class ToxicChatLSTM(nn.Module):
         )
         self.dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(hidden_dim, 1)
-        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x: torch.Tensor, lengths: torch.Tensor) -> torch.Tensor:
         embedded = self.embedding(x)
@@ -41,6 +40,6 @@ class ToxicChatLSTM(nn.Module):
             enforce_sorted=False,
         )
         _, (hidden, _) = self.lstm(packed)
-        out = self.fc(self.dropout(hidden[-1]))
-        # Squeeze the singleton output dim so probs align with [batch] labels.
-        return self.sigmoid(out).squeeze(-1)
+        # Return logits for numerically stable BCEWithLogitsLoss. Callers apply
+        # sigmoid only when probabilities are needed for metrics or inference.
+        return self.fc(self.dropout(hidden[-1])).squeeze(-1)

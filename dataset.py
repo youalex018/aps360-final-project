@@ -3,7 +3,9 @@
 The vocabulary is fit on the training split only; fitting on val/test would leak
 information about held-out examples into the model's token coverage.
 """
+import html
 import re
+import unicodedata
 
 import numpy as np
 import pandas as pd
@@ -40,13 +42,15 @@ _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
 def clean_text(text: str) -> list[str]:
-    """Lowercase, drop non-ASCII, then tokenize with slang expansion.
+    """Normalize HTML/Unicode/whitespace, tokenize, then expand LoL slang.
 
-    Non-ASCII is stripped via encode/decode rather than regex so emoji and
-    other unicode noise vanish before tokenization instead of fragmenting it.
+    NFKD transliteration preserves ASCII equivalents such as ``é`` -> ``e``;
+    symbols without an ASCII equivalent (including emoji) are removed.
     """
-    text = str(text).lower()
-    text = text.encode("ascii", "ignore").decode("ascii")
+    text = html.unescape(str(text))
+    text = unicodedata.normalize("NFKD", text)
+    text = text.encode("ascii", "ignore").decode("ascii").lower()
+    text = " ".join(text.split())
     tokens: list[str] = []
     for tok in _TOKEN_RE.findall(text):
         # Expand slang first; a mapped value may itself be multi-word.
@@ -132,13 +136,32 @@ def _split(df: pd.DataFrame):
 
 
 def load_splits(csv_path=config.DATA_PATH):
-    """Return raw (train, val, test) DataFrames; shared by LSTM and baseline."""
+    """Return shared train/validation/test DataFrames.
+
+    Prepared L2DTnH data carries case-grouped split assignments. The legacy
+    role-proxy Tribunal file has no split column and falls back to the original
+    row-level stratified split so the first experiment remains reproducible.
+    """
     df = pd.read_csv(csv_path)
     required = {"text", "label"}
     if not required.issubset(df.columns):
         raise ValueError(
             "Expected a CSV with text,label columns. Run prepare_tribunal.py first."
         )
+    if "split" in df.columns:
+        expected = {"train", "val", "test"}
+        observed = set(df["split"].dropna().unique())
+        if observed != expected:
+            raise ValueError(f"Expected split values {expected}, got {observed}.")
+        splits = tuple(
+            df[df["split"] == name].reset_index(drop=True)
+            for name in ("train", "val", "test")
+        )
+        if "group_id" in df.columns:
+            group_sets = [set(part["group_id"]) for part in splits]
+            if any(group_sets[i] & group_sets[j] for i in range(3) for j in range(i + 1, 3)):
+                raise ValueError("A group_id appears in more than one data split.")
+        return splits
     return _split(df)
 
 
