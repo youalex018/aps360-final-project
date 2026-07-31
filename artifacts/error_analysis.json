@@ -1,0 +1,28 @@
+{
+  "baseline_confusion_matrix": [
+    [
+      1832,
+      107
+    ],
+    [
+      48,
+      147
+    ]
+  ],
+  "lstm_seed42_confusion_matrix": [
+    [
+      1873,
+      66
+    ],
+    [
+      78,
+      117
+    ]
+  ],
+  "baseline_test_f1": 0.6547884187082406,
+  "lstm_seed42_test_f1": 0.6190476190476191,
+  "lstm_three_seed_test_f1_mean": 0.6335342861658652,
+  "lstm_three_seed_test_f1_std": 0.015067839728839275,
+  "success_against_baseline": false,
+  "note": "The grouped test split was opened only after configuration and per-seed thresholds were frozen from validation results."
+}

@@ -3,6 +3,8 @@
 The vocabulary is fit on the training split only; fitting on val/test would leak
 information about held-out examples into the model's token coverage.
 """
+from __future__ import annotations
+
 import html
 import re
 import unicodedata
@@ -16,6 +18,8 @@ import config
 
 PAD_TOKEN, UNK_TOKEN = "<pad>", "<unk>"
 PAD_IDX, UNK_IDX = 0, 1
+CTX_TOKEN, MSG_TOKEN, TGT_TOKEN = "<ctx>", "<msg>", "<tgt>"
+CONTEXT_SPECIAL_TOKENS = (CTX_TOKEN, MSG_TOKEN, TGT_TOKEN)
 
 # Slang is expanded so semantically identical phrases collapse to shared tokens
 # the model already has signal for (e.g. "jg" and "jungle" stop competing for
@@ -69,7 +73,14 @@ class Vocab:
         return len(self.stoi)
 
     @classmethod
-    def build(cls, token_lists, max_size: int, min_freq: int) -> "Vocab":
+    def build(
+        cls,
+        token_lists,
+        max_size: int,
+        min_freq: int,
+        *,
+        reserved_tokens: tuple[str, ...] = (),
+    ) -> "Vocab":
         counts: dict[str, int] = {}
         for tokens in token_lists:
             for tok in tokens:
@@ -80,7 +91,15 @@ class Vocab:
             key=lambda t: (-counts[t], t),
         )
         stoi = {PAD_TOKEN: PAD_IDX, UNK_TOKEN: UNK_IDX}
-        for tok in ordered[: max(0, max_size - len(stoi))]:
+        for tok in reserved_tokens:
+            if tok not in stoi:
+                stoi[tok] = len(stoi)
+        reserved = set(stoi)
+        for tok in ordered:
+            if tok in reserved:
+                continue
+            if len(stoi) >= max_size:
+                break
             stoi[tok] = len(stoi)
         return cls(stoi)
 
@@ -92,19 +111,94 @@ class Vocab:
         return np.asarray(ids, dtype=np.int64)
 
 
+def build_context_tokens(
+    group_texts: list[str],
+    target_pos: int,
+    k: int,
+) -> list[str]:
+    """Build a same-match context token sequence centered on ``target_pos``.
+
+    Uses up to ``k`` previous and ``k`` next messages inside the group only.
+    Markers: ``<ctx>`` before the target, ``<tgt>`` on the target, ``<msg>`` after.
+    """
+    if k < 1:
+        raise ValueError(f"context_k must be >= 1, got {k}")
+    if not 0 <= target_pos < len(group_texts):
+        raise IndexError(
+            f"target_pos {target_pos} out of range for group length {len(group_texts)}"
+        )
+    start = max(0, target_pos - k)
+    end = min(len(group_texts), target_pos + k + 1)
+    tokens: list[str] = []
+    for index in range(start, end):
+        if index == target_pos:
+            tokens.append(TGT_TOKEN)
+        elif index < target_pos:
+            tokens.append(CTX_TOKEN)
+        else:
+            tokens.append(MSG_TOKEN)
+        tokens.extend(clean_text(group_texts[index]))
+    return tokens
+
+
+def add_context_column(df: pd.DataFrame, context_k: int) -> pd.DataFrame:
+    """Return a copy of ``df`` with a ``context_text`` column of joined tokens.
+
+    Requires ``group_id`` and prefers ``msg_index`` for within-match order.
+    Neighbors are drawn only from rows that share the same ``group_id``.
+    """
+    if "group_id" not in df.columns:
+        raise ValueError("context windows require a group_id column.")
+    ordered = df.copy()
+    if "msg_index" in ordered.columns:
+        ordered = ordered.sort_values(["group_id", "msg_index"], kind="stable")
+    else:
+        ordered = ordered.sort_values(["group_id"], kind="stable")
+    ordered = ordered.reset_index(drop=True)
+
+    context_texts: list[str] = [""] * len(ordered)
+    for _, group in ordered.groupby("group_id", sort=False):
+        positions = group.index.to_numpy()
+        texts = group["text"].astype(str).tolist()
+        group_ids = group["group_id"].to_numpy()
+        if len(set(group_ids)) != 1:
+            raise AssertionError("Context builder mixed group_id values.")
+        for local_pos, frame_pos in enumerate(positions):
+            tokens = build_context_tokens(texts, local_pos, context_k)
+            context_texts[frame_pos] = " ".join(tokens)
+    ordered["context_text"] = context_texts
+    return ordered
+
+
 class ToxicChatDataset(Dataset):
     """Wraps a DataFrame of (text, label) rows as encoded tensors."""
 
-    def __init__(self, df: pd.DataFrame, vocab: Vocab, max_len: int = config.MAX_LEN):
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        vocab: Vocab,
+        max_len: int = config.MAX_LEN,
+        *,
+        text_column: str = "text",
+    ):
         self.vocab = vocab
         self.max_len = max_len
-        token_lists = [clean_text(t) for t in df["text"]]
+        if text_column == "context_text":
+            # Context strings already include special markers as whitespace tokens.
+            token_lists = [str(text).split() for text in df[text_column]]
+        else:
+            token_lists = [clean_text(t) for t in df[text_column]]
         self.lengths = np.asarray(
             [max(1, min(len(tokens), max_len)) for tokens in token_lists],
             dtype=np.int64,
         )
         self.encoded = [vocab.encode(tokens, max_len) for tokens in token_lists]
         self.labels = df["label"].to_numpy(dtype=np.float32)
+        self.texts = (
+            df["raw_text"].astype(str).tolist()
+            if "raw_text" in df.columns
+            else df["text"].astype(str).tolist()
+        )
 
     def __len__(self) -> int:
         return len(self.labels)
@@ -165,23 +259,68 @@ def load_splits(csv_path=config.DATA_PATH):
     return _split(df)
 
 
-def get_dataloaders(csv_path=config.DATA_PATH, batch_size: int = config.BATCH_SIZE):
-    """Build the train/val/test DataLoaders plus the fitted vocab.
+def get_dataloaders(
+    csv_path=config.DATA_PATH,
+    batch_size: int = config.BATCH_SIZE,
+    *,
+    seed: int = config.SEED,
+    include_test: bool = True,
+    context_k: int | None = None,
+    max_len: int | None = None,
+):
+    """Build deterministic DataLoaders and a training-only vocabulary.
 
-    Returns (train_dl, val_dl, test_dl, vocab) so callers can size the embedding
-    table from len(vocab).
+    ``include_test=False`` is the tuning path: the held-out frame is neither
+    wrapped in a Dataset nor exposed to the caller. The returned test loader is
+    therefore ``None`` until a configuration has been frozen.
+
+    When ``context_k`` is set, each example concatenates same-``group_id``
+    neighbors and the vocabulary reserves context marker tokens.
     """
     train_df, val_df, test_df = load_splits(csv_path)
+    resolved_max_len = config.MAX_LEN if max_len is None else max_len
+    text_column = "text"
+    reserved: tuple[str, ...] = ()
+    if context_k is not None:
+        train_df = add_context_column(train_df, context_k)
+        val_df = add_context_column(val_df, context_k)
+        if include_test:
+            test_df = add_context_column(test_df, context_k)
+        text_column = "context_text"
+        reserved = CONTEXT_SPECIAL_TOKENS
+        if max_len is None:
+            resolved_max_len = config.CONTEXT_MAX_LEN
+
+    def _token_lists(frame: pd.DataFrame):
+        if text_column == "context_text":
+            return (str(text).split() for text in frame[text_column])
+        return (clean_text(t) for t in frame["text"])
+
     vocab = Vocab.build(
-        (clean_text(t) for t in train_df["text"]),
+        _token_lists(train_df),
         max_size=config.MAX_VOCAB_SIZE,
         min_freq=config.MIN_FREQ,
+        reserved_tokens=reserved,
     )
-    train_ds = ToxicChatDataset(train_df, vocab)
-    val_ds = ToxicChatDataset(val_df, vocab)
-    test_ds = ToxicChatDataset(test_df, vocab)
-
-    train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+    train_ds = ToxicChatDataset(
+        train_df, vocab, resolved_max_len, text_column=text_column
+    )
+    val_ds = ToxicChatDataset(
+        val_df, vocab, resolved_max_len, text_column=text_column
+    )
+    generator = torch.Generator()
+    generator.manual_seed(seed)
+    train_dl = DataLoader(
+        train_ds,
+        batch_size=batch_size,
+        shuffle=True,
+        generator=generator,
+    )
     val_dl = DataLoader(val_ds, batch_size=batch_size)
-    test_dl = DataLoader(test_ds, batch_size=batch_size)
+    test_dl = None
+    if include_test:
+        test_ds = ToxicChatDataset(
+            test_df, vocab, resolved_max_len, text_column=text_column
+        )
+        test_dl = DataLoader(test_ds, batch_size=batch_size)
     return train_dl, val_dl, test_dl, vocab

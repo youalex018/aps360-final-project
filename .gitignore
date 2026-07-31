@@ -14,15 +14,33 @@ build/
 venv/
 env/
 
+# Test / tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
 # Jupyter
 .ipynb_checkpoints/
 
 # ML artifacts (regenerate with train.py)
 checkpoints/
+*.pt
+*.pth
+artifacts/downloads/
 
 # Local data (large/source corpora)
 data/tribunal/
 data/l2dtnh/
+# Final-test screenshots may contain player identifiers. The reviewed,
+# anonymized CSV and audit/manifest files remain eligible for version control.
+data/final_test/raw/
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
 
 # IDE / editor
 .idea/
@@ -30,6 +48,6 @@ data/l2dtnh/
 
 # Cursor (local agent rules and choices log)
 .cursor/
-PROJECT_CHOICES.md
-FINAL_TEST_PROTOCOL.md
+md_docs/
+markdown/
 reports/

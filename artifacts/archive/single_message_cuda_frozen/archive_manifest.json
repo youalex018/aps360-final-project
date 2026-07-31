@@ -1,0 +1,188 @@
+﻿{
+    "archived_at":  "2026-07-16",
+    "files":  [
+                  {
+                      "bytes":  88789,
+                      "path":  "frozen_lstm_config.json"
+                  },
+                  {
+                      "bytes":  15012,
+                      "path":  "lstm_metrics.json"
+                  },
+                  {
+                      "bytes":  98777,
+                      "path":  "experiment_summary.json"
+                  },
+                  {
+                      "bytes":  580,
+                      "path":  "error_analysis.json"
+                  },
+                  {
+                      "bytes":  69872,
+                      "path":  "lstm_predictions.csv"
+                  },
+                  {
+                      "bytes":  822,
+                      "path":  "baseline_metrics.json"
+                  },
+                  {
+                      "bytes":  61067,
+                      "path":  "baseline_predictions.csv"
+                  },
+                  {
+                      "bytes":  1894,
+                      "path":  "data_audit.json"
+                  },
+                  {
+                      "bytes":  525,
+                      "path":  "qualitative_examples.csv"
+                  },
+                  {
+                      "bytes":  1070,
+                      "path":  "report_metric_manifest.json"
+                  },
+                  {
+                      "bytes":  2521581,
+                      "path":  "best_model.pt"
+                  },
+                  {
+                      "bytes":  10108,
+                      "path":  "experiments/bilstm_pool_auto_seed42.json"
+                  },
+                  {
+                      "bytes":  1862845,
+                      "path":  "experiments/bilstm_pool_auto_seed42.pt"
+                  },
+                  {
+                      "bytes":  10092,
+                      "path":  "experiments/bilstm_pool_w5_seed42.json"
+                  },
+                  {
+                      "bytes":  1862761,
+                      "path":  "experiments/bilstm_pool_w5_seed42.pt"
+                  },
+                  {
+                      "bytes":  9191,
+                      "path":  "experiments/corrected_current_seed42.json"
+                  },
+                  {
+                      "bytes":  2521735,
+                      "path":  "experiments/corrected_current_seed42.pt"
+                  },
+                  {
+                      "bytes":  14663,
+                      "path":  "experiments/dropout_05_seed42.json"
+                  },
+                  {
+                      "bytes":  2521601,
+                      "path":  "experiments/dropout_05_seed42.pt"
+                  },
+                  {
+                      "bytes":  69872,
+                      "path":  "experiments/dropout_05_seed42_test_predictions.csv"
+                  },
+                  {
+                      "bytes":  8254,
+                      "path":  "experiments/dropout_05_seed43.json"
+                  },
+                  {
+                      "bytes":  2521601,
+                      "path":  "experiments/dropout_05_seed43.pt"
+                  },
+                  {
+                      "bytes":  69872,
+                      "path":  "experiments/dropout_05_seed43_test_predictions.csv"
+                  },
+                  {
+                      "bytes":  6432,
+                      "path":  "experiments/dropout_05_seed44.json"
+                  },
+                  {
+                      "bytes":  2521601,
+                      "path":  "experiments/dropout_05_seed44.pt"
+                  },
+                  {
+                      "bytes":  69872,
+                      "path":  "experiments/dropout_05_seed44_test_predictions.csv"
+                  },
+                  {
+                      "bytes":  9204,
+                      "path":  "experiments/regularized_wd_seed42.json"
+                  },
+                  {
+                      "bytes":  2521641,
+                      "path":  "experiments/regularized_wd_seed42.pt"
+                  },
+                  {
+                      "bytes":  11886,
+                      "path":  "experiments/small_1x96_seed42.json"
+                  },
+                  {
+                      "bytes":  1825729,
+                      "path":  "experiments/small_1x96_seed42.pt"
+                  },
+                  {
+                      "bytes":  10026,
+                      "path":  "experiments/weight_3_seed42.json"
+                  },
+                  {
+                      "bytes":  2521581,
+                      "path":  "experiments/weight_3_seed42.pt"
+                  },
+                  {
+                      "bytes":  9161,
+                      "path":  "experiments/weight_5_seed42.json"
+                  },
+                  {
+                      "bytes":  2521581,
+                      "path":  "experiments/weight_5_seed42.pt"
+                  },
+                  {
+                      "bytes":  9139,
+                      "path":  "experiments/weight_7_seed42.json"
+                  },
+                  {
+                      "bytes":  2521581,
+                      "path":  "experiments/weight_7_seed42.pt"
+                  },
+                  {
+                      "bytes":  69872,
+                      "path":  "experiments/weight_7_seed42_test_predictions.csv"
+                  },
+                  {
+                      "bytes":  9144,
+                      "path":  "experiments/weight_7_seed43.json"
+                  },
+                  {
+                      "bytes":  2521581,
+                      "path":  "experiments/weight_7_seed43.pt"
+                  },
+                  {
+                      "bytes":  69872,
+                      "path":  "experiments/weight_7_seed43_test_predictions.csv"
+                  },
+                  {
+                      "bytes":  13687,
+                      "path":  "experiments/weight_7_seed44.json"
+                  },
+                  {
+                      "bytes":  2521581,
+                      "path":  "experiments/weight_7_seed44.pt"
+                  },
+                  {
+                      "bytes":  69872,
+                      "path":  "experiments/weight_7_seed44_test_predictions.csv"
+                  },
+                  {
+                      "bytes":  9192,
+                      "path":  "experiments/weight_auto_adamw_seed42.json"
+                  },
+                  {
+                      "bytes":  2521735,
+                      "path":  "experiments/weight_auto_adamw_seed42.pt"
+                  }
+              ],
+    "purpose":  "Preserve frozen single-message weight_7 CUDA evidence before uploading full artifacts/ from context-hybrid Colab run",
+    "source":  "artifacts/",
+    "note":  "Progress report and generate_report_assets.py still reference lstm_metrics.json and frozen_lstm_config.json at artifacts/ root until context/hybrid beats baseline"
+}

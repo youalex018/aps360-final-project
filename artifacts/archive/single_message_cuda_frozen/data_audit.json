@@ -1,0 +1,94 @@
+{
+  "source_rows": 15171,
+  "source_label_counts": {
+    "0": 13773,
+    "1": 1398
+  },
+  "source_groups": 101,
+  "missing_message_rows": 5,
+  "missing_group_rows": 116,
+  "missing_required_rows": 116,
+  "empty_after_normalization_rows": 341,
+  "conflicting_normalized_texts": 42,
+  "conflicting_rows_removed": 421,
+  "same_label_duplicate_rows_retained": 4233,
+  "prepared_rows": 14293,
+  "prepared_label_counts": {
+    "0": 12973,
+    "1": 1320
+  },
+  "prepared_positive_rate": 0.0923529000209893,
+  "prepared_groups": 101,
+  "token_length": {
+    "mean": 3.048555236829217,
+    "median": 2.0,
+    "p95": 8.0,
+    "max": 38
+  },
+  "splits": {
+    "test": {
+      "rows": 2134,
+      "groups": 16,
+      "label_counts": {
+        "0": 1939,
+        "1": 195
+      },
+      "positive_rate": 0.09137769447047797
+    },
+    "train": {
+      "rows": 10050,
+      "groups": 70,
+      "label_counts": {
+        "0": 9123,
+        "1": 927
+      },
+      "positive_rate": 0.09223880597014926
+    },
+    "val": {
+      "rows": 2109,
+      "groups": 15,
+      "label_counts": {
+        "0": 1911,
+        "1": 198
+      },
+      "positive_rate": 0.09388335704125178
+    }
+  },
+  "cleaning_examples": [
+    {
+      "raw": "its gg",
+      "cleaned": "its good game",
+      "label": 0
+    },
+    {
+      "raw": "somebody's mmr is so low in our team",
+      "cleaned": "somebody s mmr is so low in our team",
+      "label": 0
+    },
+    {
+      "raw": "gold --- elo",
+      "cleaned": "gold elo",
+      "label": 1
+    },
+    {
+      "raw": "got --- ",
+      "cleaned": "got",
+      "label": 0
+    },
+    {
+      "raw": "gj",
+      "cleaned": "good job",
+      "label": 0
+    }
+  ],
+  "legacy_role_proxy": {
+    "rows": 100000,
+    "label_counts": {
+      "0": 50000,
+      "1": 50000
+    },
+    "conflicting_normalized_texts": 3149,
+    "rows_with_conflicting_labels": 40165,
+    "median_tokens": 2.0
+  }
+}

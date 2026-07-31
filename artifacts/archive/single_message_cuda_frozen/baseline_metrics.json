@@ -1,0 +1,42 @@
+{
+  "schema_version": 2,
+  "dataset": "data/l2dtnh/l2dtnh_prepared.csv",
+  "model": "TF-IDF + LinearSVC",
+  "class_weight": "balanced",
+  "vocabulary_size": 3627,
+  "validation": {
+    "accuracy": 0.9217638691322901,
+    "balanced_accuracy": 0.8255395398252541,
+    "precision": 0.5668016194331984,
+    "recall": 0.7070707070707071,
+    "f1": 0.6292134831460674,
+    "confusion_matrix": [
+      [
+        1804,
+        107
+      ],
+      [
+        58,
+        140
+      ]
+    ]
+  },
+  "test_accessed": true,
+  "test": {
+    "accuracy": 0.9273664479850047,
+    "balanced_accuracy": 0.8493315348911017,
+    "precision": 0.5787401574803149,
+    "recall": 0.7538461538461538,
+    "f1": 0.6547884187082406,
+    "confusion_matrix": [
+      [
+        1832,
+        107
+      ],
+      [
+        48,
+        147
+      ]
+    ]
+  }
+}

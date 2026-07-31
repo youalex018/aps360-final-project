@@ -1,0 +1,8 @@
+{
+  "baseline_test_f1": 0.6547884187082406,
+  "context_hybrid_seed42_test_f1": 0.680306905370844,
+  "context_hybrid_three_seed_test_f1_mean": 0.6663950274695101,
+  "context_hybrid_three_seed_test_f1_std": 0.015118032110439309,
+  "success_against_baseline": true,
+  "note": "Grouped test opened only after context/hybrid configuration and fusion parameters were frozen from validation. Progress report assets should be regenerated only when success_against_baseline is true."
+}

@@ -20,7 +20,24 @@ import config
 from dataset import clean_text
 
 SOURCE_COLUMNS = ["message", "label", "chatlog_id"]
-OUTPUT_COLUMNS = ["raw_text", "text", "label", "group_id", "split"]
+ORDER_COLUMNS = ["time", "id"]
+OUTPUT_COLUMNS = ["raw_text", "text", "label", "group_id", "msg_index", "split"]
+
+
+def _assign_msg_index(df: pd.DataFrame) -> pd.DataFrame:
+    """Order messages within each match and assign a stable ``msg_index``.
+
+    Prefer raw ``time`` then ``id`` when present; otherwise keep encounter order.
+    """
+    ordered = df.copy()
+    sort_cols = ["chatlog_id"]
+    if "time" in ordered.columns:
+        sort_cols.append("time")
+    if "id" in ordered.columns:
+        sort_cols.append("id")
+    ordered = ordered.sort_values(sort_cols, kind="stable").reset_index(drop=True)
+    ordered["msg_index"] = ordered.groupby("chatlog_id", sort=False).cumcount()
+    return ordered
 
 
 def _label_counts(df: pd.DataFrame) -> dict[str, int]:
@@ -119,10 +136,14 @@ def prepare_frame(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     df = df[~conflict_mask].copy()
 
     df["label"] = df["label"].astype(int)
+    df = _assign_msg_index(df)
     df["group_id"] = df["chatlog_id"].astype(int)
+    audit["ordering_columns_used"] = [
+        column for column in ORDER_COLUMNS if column in df.columns
+    ]
     prepared = assign_grouped_splits(df)
     prepared = prepared[OUTPUT_COLUMNS].sort_values(
-        ["split", "group_id"], kind="stable"
+        ["split", "group_id", "msg_index"], kind="stable"
     )
 
     token_lengths = prepared["text"].str.split().str.len()

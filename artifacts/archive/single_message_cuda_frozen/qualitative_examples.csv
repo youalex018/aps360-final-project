@@ -1,0 +1,5 @@
+category,text,label,lstm_probability,lstm_prediction,svm_margin,svm_prediction,comment
+slang success,12 min to ff?,0,0.042,0,-0.668,0,Both models handle game-specific language.
+LSTM false positive,i didn't call u noob,0,0.998,1,0.224,1,A benign message receives a high toxicity probability.
+LSTM false negative,and you died with no honor,1,0.000,0,0.490,1,The sequential model misses an expert-labelled toxic message.
+SVM-only success,you fuckin kdding me ?,1,0.778,0,1.287,1,Bag-of-words succeeds where the LSTM fails.

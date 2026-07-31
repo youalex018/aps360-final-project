@@ -1,0 +1,6 @@
+category,text,label,hybrid_probability,hybrid_prediction,svm_margin,svm_prediction,comment
+slang success,12 min to ff?,0,0.250,0,-0.668,0,Both models handle game-specific language.
+Hybrid false positive,fuck this shit troll games,0,0.851,1,1.322,1,A benign message receives a high toxicity probability.
+Hybrid false negative,u fuked us,1,0.115,0,-1.668,0,The hybrid misses an expert-labelled toxic message.
+SVM-only success,and you died with no honor,1,0.434,0,0.490,1,Bag-of-words succeeds where the hybrid fails.
+Hybrid-only success,WORST TEAM EY,1,0.646,1,-0.014,0,Late fusion corrects an SVM error.
