@@ -40,11 +40,14 @@ MANIFEST_PATH = FINAL_TEST_DIR / "collection_manifest.json"
 AUDIT_PATH = FINAL_TEST_DIR / "exclusion_audit.json"
 
 LIVE_API = "https://127.0.0.1:2999/liveclientdata"
-OCR_SCALE = 2.5
+OCR_SCALE = 3.0
+OCR_BORDER = 16
 MIN_OCR_CONFIDENCE = 20.0
 TARGET_MIN_MESSAGES = 200
 TARGET_MAX_MESSAGES = 300
 TARGET_MATCHES = 20
+CALIBRATION_ROI_PATH = RAW_DIR / "calibration_roi.png"
+CALIBRATION_OCR_PATH = RAW_DIR / "calibration_ocr_input.png"
 
 URL_RE = re.compile(r"(?i)\b(?:https?://|www\.)\S+")
 RIOT_ID_RE = re.compile(
@@ -118,6 +121,36 @@ def require_windows() -> None:
         raise RuntimeError("Chat capture is currently supported only on Windows.")
 
 
+def enable_dpi_awareness() -> None:
+    """Make Win32 window rects match physical pixels used by mss.
+
+    Without this, displays with scaling (125%/150%/…) return logical coordinates
+    and the capture region can land on the wrong app (often the IDE).
+    """
+
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        # Per-monitor DPI awareness v2 (Windows 10 1703+).
+        ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
+        return
+    except Exception:
+        pass
+    try:
+        import ctypes
+
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except Exception:
+        try:
+            import ctypes
+
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
+
 def import_capture_dependencies():
     """Import optional capture packages only for commands that need them."""
 
@@ -145,31 +178,79 @@ def ensure_tesseract_available(pytesseract) -> None:
         ) from exc
 
 
-def find_league_window(win32gui) -> tuple[int, str]:
-    """Return the largest visible League game window."""
+def league_window_rank(title: str) -> int | None:
+    """Return a preference rank for a window title, or None if not a game window.
 
-    candidates: list[tuple[int, int, str]] = []
+    Higher is better. The Riot launcher is excluded. Prefer the common in-game
+    title "League of Legends (TM) Client" when several League windows exist.
+    """
 
-    def visit(hwnd: int, _extra: object) -> None:
-        if not win32gui.IsWindowVisible(hwnd):
+    lowered = title.strip().lower()
+    if not lowered or lowered == "riot client":
+        return None
+    if "riot client" in lowered and "league of legends" not in lowered:
+        return None
+    if "league of legends" not in lowered:
+        return None
+    if "(tm) client" in lowered:
+        return 3
+    if lowered == "league of legends":
+        return 2
+    return 1
+
+
+def find_league_window(win32gui, hwnd: int | None = None) -> tuple[int, str]:
+    """Return the preferred visible League game window."""
+
+    if hwnd is not None:
+        if not win32gui.IsWindow(hwnd) or not win32gui.IsWindowVisible(hwnd):
+            raise RuntimeError(f"Window handle {hwnd} is not a visible window.")
+        title = win32gui.GetWindowText(hwnd).strip() or f"hwnd:{hwnd}"
+        return hwnd, title
+
+    # (rank, area, hwnd, title)
+    candidates: list[tuple[int, int, int, str]] = []
+
+    def visit(candidate_hwnd: int, _extra: object) -> None:
+        if not win32gui.IsWindowVisible(candidate_hwnd):
             return
-        title = win32gui.GetWindowText(hwnd).strip()
-        lowered = title.lower()
-        if "league of legends" not in lowered or "client" not in lowered:
+        title = win32gui.GetWindowText(candidate_hwnd).strip()
+        rank = league_window_rank(title)
+        if rank is None:
             return
-        left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+        left, top, right, bottom = win32gui.GetWindowRect(candidate_hwnd)
         area = max(0, right - left) * max(0, bottom - top)
         if area:
-            candidates.append((area, hwnd, title))
+            candidates.append((rank, area, candidate_hwnd, title))
 
     win32gui.EnumWindows(visit, None)
     if not candidates:
         raise RuntimeError(
             "League game window not found. Start a Practice Tool/custom game "
-            "in borderless or windowed mode."
+            "in borderless or windowed mode, then run calibrate again. "
+            "Use `python collect_chat.py list-windows` to inspect titles."
         )
-    _, hwnd, title = max(candidates)
-    return hwnd, title
+    _rank, _area, selected_hwnd, title = max(candidates)
+    return selected_hwnd, title
+
+
+def list_capture_windows(win32gui) -> list[tuple[int, str, tuple[int, int, int, int]]]:
+    """Return visible top-level windows with non-empty titles for debugging."""
+
+    windows: list[tuple[int, str, tuple[int, int, int, int]]] = []
+
+    def visit(hwnd: int, _extra: object) -> None:
+        if not win32gui.IsWindowVisible(hwnd):
+            return
+        title = win32gui.GetWindowText(hwnd).strip()
+        if not title:
+            return
+        left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+        windows.append((hwnd, title, (left, top, right - left, bottom - top)))
+
+    win32gui.EnumWindows(visit, None)
+    windows.sort(key=lambda item: item[2][2] * item[2][3], reverse=True)
+    return windows
 
 
 def client_rect(win32gui, hwnd: int) -> tuple[int, int, int, int]:
@@ -190,6 +271,13 @@ def grab_region(sct, np, rect: tuple[int, int, int, int]):
     x, y, width, height = rect
     shot = sct.grab({"left": x, "top": y, "width": width, "height": height})
     return np.asarray(shot)
+
+
+def open_screen_capture(mss):
+    """Return an mss screen-capture context (MSS preferred over deprecated mss())."""
+
+    factory = getattr(mss, "MSS", None) or mss.mss
+    return factory()
 
 
 def save_calibration(calibration: Calibration) -> None:
@@ -217,27 +305,74 @@ def calibrated_rect(
     )
 
 
-def preprocess_for_ocr(image, cv2):
-    """Upscale and enhance colored chat text over a variable game background."""
+def _to_bgr(image, cv2):
+    if image.ndim == 3 and image.shape[2] == 4:
+        return cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
+    if image.ndim == 3:
+        return image
+    return cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
 
-    bgr = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
+
+def _pad_ocr_page(binary, cv2):
+    return cv2.copyMakeBorder(
+        binary,
+        OCR_BORDER,
+        OCR_BORDER,
+        OCR_BORDER,
+        OCR_BORDER,
+        cv2.BORDER_CONSTANT,
+        value=255,
+    )
+
+
+def _chat_glyph_mask(bgr, cv2):
+    """Isolate LoL chat glyphs from translucent terrain/UI behind the panel.
+
+    White message bodies are high-value/low-saturation; names and system lines
+    are saturated bright UI colors. Terrain tends to be mid-value and is dropped.
+    """
+
+    import numpy as np
+
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    _hue, saturation, value = cv2.split(hsv)
+    white = ((value >= 175) & (saturation <= 90)).astype(np.uint8) * 255
+    colored = ((value >= 150) & (saturation >= 45)).astype(np.uint8) * 255
+    mask = cv2.bitwise_or(white, colored)
+
+    component_count, labels, stats, _centroids = cv2.connectedComponentsWithStats(
+        mask, connectivity=8
+    )
+    clean = np.zeros_like(mask)
+    height, width = mask.shape
+    max_area = max(64, int(0.08 * height * width))
+    for index in range(1, component_count):
+        _x, _y, comp_width, comp_height, area = stats[index]
+        if area < 12 or area > max_area:
+            continue
+        if comp_width > 0.55 * width and comp_height > 0.2 * height:
+            continue
+        if comp_height > 0.35 * height:
+            continue
+        clean[labels == index] = 255
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+    return cv2.morphologyEx(clean, cv2.MORPH_OPEN, kernel, iterations=1)
+
+
+def preprocess_for_ocr(image, cv2):
+    """Upscale colored LoL chat into dark text on a light background for Tesseract."""
+
     enlarged = cv2.resize(
-        bgr,
+        _to_bgr(image, cv2),
         None,
         fx=OCR_SCALE,
         fy=OCR_SCALE,
         interpolation=cv2.INTER_CUBIC,
     )
-    gray = cv2.cvtColor(enlarged, cv2.COLOR_BGR2GRAY)
-    gray = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8)).apply(gray)
-    return cv2.adaptiveThreshold(
-        gray,
-        255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
-        31,
-        7,
-    )
+    mask = _chat_glyph_mask(enlarged, cv2)
+    binary = cv2.bitwise_not(mask)
+    return _pad_ocr_page(binary, cv2)
 
 
 def ocr_lines(image, cv2, pytesseract) -> list[OCRLine]:
@@ -277,10 +412,10 @@ def ocr_lines(image, cv2, pytesseract) -> list[OCRLine]:
     lines: list[OCRLine] = []
     for words in grouped.values():
         words.sort(key=lambda item: item[2])
-        left = min(item[2] for item in words)
-        top = min(item[3] for item in words)
-        right = max(item[2] + item[4] for item in words)
-        bottom = max(item[3] + item[5] for item in words)
+        left = min(item[2] for item in words) - OCR_BORDER
+        top = min(item[3] for item in words) - OCR_BORDER
+        right = max(item[2] + item[4] for item in words) - OCR_BORDER
+        bottom = max(item[3] + item[5] for item in words) - OCR_BORDER
         lines.append(
             OCRLine(
                 text=" ".join(item[0] for item in words),
@@ -462,19 +597,45 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
     return records
 
 
+def command_list_windows(_args: argparse.Namespace) -> None:
+    require_windows()
+    enable_dpi_awareness()
+    _cv2, _mss, _np, _pytesseract, win32gui = import_capture_dependencies()
+    print("Visible windows (hwnd, rank, title, x, y, w, h):")
+    for hwnd, title, (x, y, width, height) in list_capture_windows(win32gui):
+        rank = league_window_rank(title)
+        marker = f"rank={rank}" if rank is not None else "      "
+        print(f"  {hwnd:>10}  {marker}  {title!r}  ({x}, {y}, {width}, {height})")
+    try:
+        selected_hwnd, selected_title = find_league_window(win32gui)
+    except RuntimeError as exc:
+        print(f"\nAuto-select: {exc}")
+        return
+    print(f"\nAuto-select: hwnd={selected_hwnd} title={selected_title!r}")
+
+
 def command_calibrate(args: argparse.Namespace) -> None:
     require_windows()
+    enable_dpi_awareness()
     cv2, mss, np, pytesseract, win32gui = import_capture_dependencies()
     if args.tesseract_cmd:
         pytesseract.pytesseract.tesseract_cmd = args.tesseract_cmd
     ensure_tesseract_available(pytesseract)
 
-    hwnd, title = find_league_window(win32gui)
+    hwnd, title = find_league_window(win32gui, hwnd=args.hwnd)
     rect = client_rect(win32gui, hwnd)
-    with mss.mss() as sct:
+    print(
+        f"Capturing window {title!r} (hwnd={hwnd}) "
+        f"client_rect=({rect[0]}, {rect[1]}, {rect[2]}, {rect[3]})"
+    )
+    with open_screen_capture(mss) as sct:
         image = grab_region(sct, np, rect)
     bgr = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
-    print("Drag a rectangle around only the visible in-game chat, then press Enter.")
+    print(
+        "An OpenCV window will open with a screenshot of that League window "
+        "(not Cursor). Drag tightly around only the chat text lines (exclude "
+        "minimap/abilities/empty UI), then press Enter. Press C to cancel."
+    )
     roi = cv2.selectROI("Select League chat region", bgr, showCrosshair=True)
     cv2.destroyAllWindows()
     x, y, width, height = (int(value) for value in roi)
@@ -493,17 +654,32 @@ def command_calibrate(args: argparse.Namespace) -> None:
     save_calibration(calibration)
 
     preview = image[y : y + height, x : x + width]
+    processed = preprocess_for_ocr(preview, cv2)
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(CALIBRATION_ROI_PATH), cv2.cvtColor(preview, cv2.COLOR_BGRA2BGR))
+    cv2.imwrite(str(CALIBRATION_OCR_PATH), processed)
     lines = ocr_lines(preview, cv2, pytesseract)
     print(f"Saved calibration to {CALIBRATION_PATH}")
+    print(f"Saved ROI preview to {CALIBRATION_ROI_PATH}")
+    print(f"Saved OCR input preview to {CALIBRATION_OCR_PATH}")
     print("OCR preview:")
     if not lines:
         print("  (no text found; open chat and recalibrate if this is unexpected)")
     for line in lines:
         print(f"  [{line.confidence:5.1f}] {line.text}")
+    mean_conf = (
+        sum(line.confidence for line in lines) / len(lines) if lines else 0.0
+    )
+    if mean_conf < 55:
+        print(
+            "Tip: mean OCR confidence is low. Open chat (Enter), tighten the ROI "
+            "to text only, and raise chat opacity in League settings if available."
+        )
 
 
 def command_collect(args: argparse.Namespace) -> None:
     require_windows()
+    enable_dpi_awareness()
     calibration = load_calibration()
     cv2, mss, np, pytesseract, win32gui = import_capture_dependencies()
     if args.tesseract_cmd:
@@ -544,7 +720,7 @@ def command_collect(args: argparse.Namespace) -> None:
     print(f"Collecting anonymous match {match_id}.")
 
     try:
-        with mss.mss() as sct:
+        with open_screen_capture(mss) as sct:
             while True:
                 game_stats = live_client_data("gamestats")
                 if game_stats is None:
@@ -559,7 +735,7 @@ def command_collect(args: argparse.Namespace) -> None:
                     last_roster_refresh = time.monotonic()
 
                 try:
-                    hwnd, _title = find_league_window(win32gui)
+                    hwnd, _title = find_league_window(win32gui, hwnd=args.hwnd)
                     rect = calibrated_rect(
                         calibration, client_rect(win32gui, hwnd)
                     )
@@ -882,6 +1058,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     calibrate = subparsers.add_parser("calibrate", help="select the chat region")
     calibrate.add_argument("--tesseract-cmd", help="path to tesseract.exe")
+    calibrate.add_argument(
+        "--hwnd",
+        type=int,
+        default=None,
+        help="optional Win32 window handle from list-windows",
+    )
     calibrate.set_defaults(func=command_calibrate)
 
     collect = subparsers.add_parser("collect", help="collect one match")
@@ -893,7 +1075,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="consecutive unavailable API reads before ending the session",
     )
     collect.add_argument("--tesseract-cmd", help="path to tesseract.exe")
+    collect.add_argument(
+        "--hwnd",
+        type=int,
+        default=None,
+        help="optional Win32 window handle from list-windows",
+    )
     collect.set_defaults(func=command_collect)
+
+    list_windows = subparsers.add_parser(
+        "list-windows",
+        help="list visible windows and the auto-selected League hwnd",
+    )
+    list_windows.set_defaults(func=command_list_windows)
 
     review = subparsers.add_parser("review", help="correct and export OCR candidates")
     review.add_argument("--session", help="anonymous match ID; defaults to first pending")

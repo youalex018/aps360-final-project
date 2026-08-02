@@ -13,6 +13,7 @@ from collect_chat import (
     anonymize_text,
     export_reviewed,
     extract_chat_messages,
+    league_window_rank,
     new_visible_messages,
     preprocess_for_ocr,
     visible_overlap,
@@ -75,6 +76,8 @@ class ImagePipelineTests(unittest.TestCase):
     def test_synthetic_screenshot_preprocessing(self):
         image = np.zeros((80, 320, 4), dtype=np.uint8)
         image[:, :, 3] = 255
+        # Mid-gray "terrain" should be ignored; only bright glyphs kept.
+        image[:, :] = (90, 95, 85, 255)
         cv2.putText(
             image,
             "Player: group dragon",
@@ -85,12 +88,24 @@ class ImagePipelineTests(unittest.TestCase):
             1,
             cv2.LINE_AA,
         )
+        cv2.putText(
+            image,
+            "[Team]",
+            (5, 20),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (220, 180, 40, 255),
+            1,
+            cv2.LINE_AA,
+        )
 
         processed = preprocess_for_ocr(image, cv2)
 
         self.assertEqual(processed.ndim, 2)
         self.assertGreater(processed.shape[0], image.shape[0])
         self.assertTrue(set(np.unique(processed)).issubset({0, 255}))
+        # Light glyphs on dark UI should become dark text on a light page.
+        self.assertGreater(float(processed.mean()), 200.0)
 
 
 class ReconciliationTests(unittest.TestCase):
@@ -118,6 +133,17 @@ class ReconciliationTests(unittest.TestCase):
         current = [message("group drag0n now", 10), message("omw", 30)]
 
         self.assertEqual(visible_overlap(previous, current), 1)
+
+
+class WindowSelectionTests(unittest.TestCase):
+    def test_prefers_game_window_over_riot_client(self):
+        self.assertIsNone(league_window_rank("Riot Client"))
+        self.assertEqual(league_window_rank("League of Legends"), 2)
+        self.assertEqual(league_window_rank("League of Legends (TM) Client"), 3)
+        self.assertGreater(
+            league_window_rank("League of Legends (TM) Client"),
+            league_window_rank("League of Legends"),
+        )
 
 
 class PrivacyTests(unittest.TestCase):
