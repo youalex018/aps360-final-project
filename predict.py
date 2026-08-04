@@ -1,13 +1,18 @@
-"""Interactive terminal scorer for the frozen primary hybrid model.
+"""Terminal scorer for the frozen primary hybrid model.
 
-Loads the seed-42 ``weight7_hybrid_late`` assets: single-message ``weight_7``
-LSTM checkpoint plus train-only TF-IDF LinearSVC late fusion (alpha / threshold
-from the hybrid run JSON). Type a chat line to get the predicted label and
-probabilities.
+Resolves the validation-winning hybrid from
+``artifacts/frozen_context_hybrid_config.json`` (seed-42 checkpoint + fusion
+alpha/threshold), falling back to ``artifacts/best_model.pt``. Score one line
+interactively, with ``--once``, or batch-score ``data/final_test/final_chat.csv``.
+
+python predict.py --once "gg ez mid diff" --show-tokens
+python predict.py --csv
+python predict.py --csv data/final_test/final_chat.csv --output artifacts/final_test_predictions.csv
 """
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sys
 from dataclasses import dataclass
@@ -20,8 +25,10 @@ from dataset import Vocab, clean_text, load_splits
 from hybrid import fit_lexical_scorer, fuse, svm_probabilities
 from train import build_model, experiment_config_from_dict
 
-DEFAULT_CHECKPOINT = config.EXPERIMENTS_DIR / "weight_7_seed42.pt"
+FROZEN_HYBRID_CONFIG = config.ARTIFACTS_DIR / "frozen_context_hybrid_config.json"
 DEFAULT_HYBRID_JSON = config.EXPERIMENTS_DIR / "weight7_hybrid_late_seed42.json"
+DEFAULT_FINAL_TEST_CSV = config.ROOT / "data" / "final_test" / "final_chat.csv"
+FALLBACK_CHECKPOINT = config.EXPERIMENTS_DIR / "weight_7_seed42.pt"
 
 
 @dataclass
@@ -40,17 +47,105 @@ class Predictor:
     checkpoint_path: Path
 
 
+@dataclass(frozen=True)
+class ResolvedAssets:
+    """Checkpoint and fusion parameters for the frozen primary hybrid."""
+
+    checkpoint_path: Path
+    alpha: float
+    threshold: float
+    configuration_id: str
+    hybrid_json: Path | None = None
+
+
+def _repo_path(raw: str | Path) -> Path:
+    path = Path(raw)
+    if path.is_absolute():
+        return path
+    return config.ROOT / path
+
+
+def resolve_frozen_assets(
+    *,
+    frozen_config: Path = FROZEN_HYBRID_CONFIG,
+    hybrid_json: Path | None = None,
+    checkpoint_path: Path | None = None,
+) -> ResolvedAssets:
+    """Prefer the frozen winner; allow explicit overrides."""
+
+    if checkpoint_path is not None and hybrid_json is not None:
+        alpha, threshold, configuration_id = load_fusion_params(hybrid_json)
+        return ResolvedAssets(
+            checkpoint_path=checkpoint_path,
+            alpha=alpha,
+            threshold=threshold,
+            configuration_id=configuration_id,
+            hybrid_json=hybrid_json,
+        )
+
+    if frozen_config.is_file() and checkpoint_path is None and hybrid_json is None:
+        with frozen_config.open(encoding="utf-8") as handle:
+            payload = json.load(handle)
+        top_two = payload.get("top_two")
+        if not isinstance(top_two, list) or not top_two:
+            raise ValueError(f"{frozen_config} is missing a non-empty top_two list")
+        winner = top_two[0]
+        configuration_id = str(winner.get("configuration_id", "unknown"))
+        runs = winner.get("runs")
+        if not isinstance(runs, list) or not runs:
+            raise ValueError(
+                f"{frozen_config} winner {configuration_id!r} has no runs"
+            )
+        seed42 = next((run for run in runs if int(run.get("seed", -1)) == 42), runs[0])
+        ckpt = _repo_path(seed42["checkpoint_path"])
+        fusion = seed42.get("fusion")
+        if not isinstance(fusion, dict):
+            raise ValueError(
+                f"{frozen_config} seed run is missing a fusion block for {configuration_id}"
+            )
+        if "alpha" not in fusion or "threshold" not in fusion:
+            raise ValueError(
+                f"{frozen_config} fusion block must include alpha and threshold"
+            )
+        if not ckpt.is_file():
+            # Canonical copy written by the LSTM screen / train entrypoint.
+            if config.CKPT_PATH.is_file():
+                ckpt = config.CKPT_PATH
+            else:
+                raise FileNotFoundError(
+                    f"Frozen checkpoint missing at {ckpt} and {config.CKPT_PATH}."
+                )
+        return ResolvedAssets(
+            checkpoint_path=ckpt,
+            alpha=float(fusion["alpha"]),
+            threshold=float(fusion["threshold"]),
+            configuration_id=configuration_id,
+            hybrid_json=None,
+        )
+
+    resolved_hybrid = hybrid_json if hybrid_json is not None else DEFAULT_HYBRID_JSON
+    alpha, threshold, configuration_id = load_fusion_params(resolved_hybrid)
+    ckpt = resolve_checkpoint(checkpoint_path)
+    return ResolvedAssets(
+        checkpoint_path=ckpt,
+        alpha=alpha,
+        threshold=threshold,
+        configuration_id=configuration_id,
+        hybrid_json=resolved_hybrid,
+    )
+
+
 def resolve_checkpoint(path: Path | None = None) -> Path:
-    """Prefer the named seed-42 checkpoint; fall back to ``config.CKPT_PATH``."""
+    """Prefer ``best_model.pt``, then the seed-42 weight_7 experiment checkpoint."""
     if path is not None:
         return path
-    if DEFAULT_CHECKPOINT.is_file():
-        return DEFAULT_CHECKPOINT
     if config.CKPT_PATH.is_file():
         return config.CKPT_PATH
+    if FALLBACK_CHECKPOINT.is_file():
+        return FALLBACK_CHECKPOINT
     raise FileNotFoundError(
-        f"No LSTM checkpoint found at {DEFAULT_CHECKPOINT} or {config.CKPT_PATH}. "
-        "Train or copy weight_7_seed42.pt under artifacts/experiments/ first."
+        f"No LSTM checkpoint found at {config.CKPT_PATH} or {FALLBACK_CHECKPOINT}. "
+        "Train or copy the frozen weight_7 checkpoint under artifacts/ first."
     )
 
 
@@ -75,11 +170,17 @@ def load_fusion_params(hybrid_json: Path) -> tuple[float, float, str]:
 def load_predictor(
     *,
     checkpoint_path: Path | None = None,
-    hybrid_json: Path = DEFAULT_HYBRID_JSON,
+    hybrid_json: Path | None = None,
+    frozen_config: Path = FROZEN_HYBRID_CONFIG,
     device_name: str | None = None,
 ) -> Predictor:
     """Load LSTM weights, restore vocab, and refit the train-only lexical scorer."""
-    ckpt_path = resolve_checkpoint(checkpoint_path)
+    assets = resolve_frozen_assets(
+        frozen_config=frozen_config,
+        hybrid_json=hybrid_json,
+        checkpoint_path=checkpoint_path,
+    )
+    ckpt_path = assets.checkpoint_path
     if not ckpt_path.is_file():
         raise FileNotFoundError(f"LSTM checkpoint not found: {ckpt_path}")
     if not config.DATA_PATH.is_file():
@@ -88,7 +189,6 @@ def load_predictor(
             "Run: python prepare_l2dtnh.py"
         )
 
-    alpha, threshold, configuration_id = load_fusion_params(hybrid_json)
     if device_name is None:
         device_name = "cuda" if torch.cuda.is_available() else "cpu"
     device = torch.device(device_name)
@@ -115,9 +215,9 @@ def load_predictor(
         device=device,
         clf=clf,
         vectorizer=vectorizer,
-        alpha=alpha,
-        threshold=threshold,
-        configuration_id=configuration_id,
+        alpha=assets.alpha,
+        threshold=assets.threshold,
+        configuration_id=assets.configuration_id,
         checkpoint_path=ckpt_path,
     )
 
@@ -156,15 +256,97 @@ def format_score(result: dict) -> str:
         f"{result['label']}  "
         f"p={result['probability']:.4f}  "
         f"(lstm={result['p_lstm']:.4f}, svm={result['p_svm']:.4f}, "
-        f"α={result['alpha']:.1f}, thr={result['threshold']:.2f})"
+        f"alpha={result['alpha']:.1f}, thr={result['threshold']:.2f})"
     )
+
+
+def load_final_test_messages(csv_path: Path) -> list[dict[str, str]]:
+    """Load anonymized final-test rows; labels may be blank."""
+    if not csv_path.is_file():
+        raise FileNotFoundError(f"Final-test CSV not found: {csv_path}")
+    with csv_path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        required = {"match_id", "message_order", "text"}
+        if reader.fieldnames is None or not required.issubset(set(reader.fieldnames)):
+            raise ValueError(
+                f"{csv_path} must include columns match_id, message_order, text"
+            )
+        rows = []
+        for row in reader:
+            text = (row.get("text") or "").strip()
+            if not text:
+                continue
+            rows.append(
+                {
+                    "match_id": row["match_id"],
+                    "message_order": row["message_order"],
+                    "text": text,
+                    "label": (row.get("label") or "").strip(),
+                    "notes": (row.get("notes") or "").strip(),
+                }
+            )
+    return rows
+
+
+def score_csv(
+    predictor: Predictor,
+    csv_path: Path,
+    output_path: Path | None = None,
+) -> Path:
+    """Score every non-empty final-test message and write a predictions CSV."""
+    rows = load_final_test_messages(csv_path)
+    if output_path is None:
+        output_path = csv_path.with_name(f"{csv_path.stem}_predictions.csv")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    fieldnames = [
+        "match_id",
+        "message_order",
+        "text",
+        "human_label",
+        "prediction",
+        "label",
+        "probability",
+        "p_lstm",
+        "p_svm",
+        "tokens",
+        "notes",
+    ]
+    toxic_count = 0
+    with output_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            result = score_message(predictor, row["text"])
+            toxic_count += int(result["prediction"])
+            writer.writerow(
+                {
+                    "match_id": row["match_id"],
+                    "message_order": row["message_order"],
+                    "text": row["text"],
+                    "human_label": row["label"],
+                    "prediction": result["prediction"],
+                    "label": result["label"],
+                    "probability": f"{result['probability']:.6f}",
+                    "p_lstm": f"{result['p_lstm']:.6f}",
+                    "p_svm": f"{result['p_svm']:.6f}",
+                    "tokens": " ".join(result["tokens"]),
+                    "notes": row["notes"],
+                }
+            )
+
+    print(
+        f"Scored {len(rows)} messages from {csv_path} -> {output_path} "
+        f"({toxic_count} predicted toxic / {len(rows) - toxic_count} non-toxic)"
+    )
+    return output_path
 
 
 def run_repl(predictor: Predictor) -> None:
     """Interactive loop: type a chat line, get a prediction."""
     print(
         f"Loaded {predictor.configuration_id} from {predictor.checkpoint_path.name} "
-        f"on {predictor.device}  (α={predictor.alpha:.1f}, thr={predictor.threshold:.2f})"
+        f"on {predictor.device}  (alpha={predictor.alpha:.1f}, thr={predictor.threshold:.2f})"
     )
     print("Type a chat message. Commands: quit / exit (or empty line / Ctrl+D).")
     while True:
@@ -185,13 +367,25 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--checkpoint",
         type=Path,
         default=None,
-        help=f"LSTM checkpoint (default: {DEFAULT_CHECKPOINT} or {config.CKPT_PATH})",
+        help=(
+            "LSTM checkpoint override (default: frozen winner checkpoint, else "
+            f"{config.CKPT_PATH})"
+        ),
     )
     parser.add_argument(
         "--hybrid-json",
         type=Path,
-        default=DEFAULT_HYBRID_JSON,
-        help="Hybrid run JSON providing fusion alpha and threshold",
+        default=None,
+        help=(
+            "Hybrid run JSON override for fusion alpha/threshold "
+            f"(default: read from {FROZEN_HYBRID_CONFIG.name})"
+        ),
+    )
+    parser.add_argument(
+        "--frozen-config",
+        type=Path,
+        default=FROZEN_HYBRID_CONFIG,
+        help="Frozen hybrid selection JSON used to pick the primary checkpoint",
     )
     parser.add_argument(
         "--device",
@@ -205,6 +399,28 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Score a single message and exit (non-interactive)",
     )
+    parser.add_argument(
+        "--csv",
+        type=Path,
+        nargs="?",
+        const=DEFAULT_FINAL_TEST_CSV,
+        default=None,
+        help=(
+            "Score messages from a final-test CSV "
+            f"(default path if flag alone: {DEFAULT_FINAL_TEST_CSV})"
+        ),
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Predictions CSV path (default: <csv_stem>_predictions.csv beside the input)",
+    )
+    parser.add_argument(
+        "--show-tokens",
+        action="store_true",
+        help="With --once, also print the cleaned token list after slang expansion",
+    )
     return parser.parse_args(argv)
 
 
@@ -214,14 +430,32 @@ def main(argv: list[str] | None = None) -> int:
         predictor = load_predictor(
             checkpoint_path=args.checkpoint,
             hybrid_json=args.hybrid_json,
+            frozen_config=args.frozen_config,
             device_name=args.device,
         )
     except (FileNotFoundError, KeyError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
+    print(
+        f"Using {predictor.configuration_id} <- {predictor.checkpoint_path} "
+        f"(alpha={predictor.alpha:.1f}, thr={predictor.threshold:.2f})",
+        file=sys.stderr,
+    )
+
+    if args.csv is not None:
+        try:
+            score_csv(predictor, args.csv, args.output)
+        except (FileNotFoundError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        return 0
+
     if args.once is not None:
-        print(format_score(score_message(predictor, args.once)))
+        result = score_message(predictor, args.once)
+        print(format_score(result))
+        if args.show_tokens:
+            print(f"tokens: {result['tokens']}")
         return 0
 
     run_repl(predictor)

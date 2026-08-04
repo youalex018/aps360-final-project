@@ -1,0 +1,93 @@
+{
+  "generated_at": "2026-08-03T01:16:17+00:00",
+  "reviewed_matches": 9,
+  "eligible_messages": 179,
+  "discarded_matches": 3,
+  "targets": {
+    "matches_minimum": 20,
+    "messages_minimum": 200,
+    "messages_maximum": 300
+  },
+  "sessions": [
+    {
+      "match_id": "M-20260801-f115958c",
+      "collection_started": "2026-08-02T02:57:50+00:00",
+      "collection_finished": "2026-08-02T03:17:11+00:00",
+      "candidate_count": 22,
+      "eligible_count": 12
+    },
+    {
+      "match_id": "M-20260802-0178f625",
+      "collection_started": "2026-08-02T20:35:53+00:00",
+      "collection_finished": "2026-08-02T20:59:31+00:00",
+      "candidate_count": 159,
+      "eligible_count": 66
+    },
+    {
+      "match_id": "M-20260802-459b7d05",
+      "collection_started": "2026-08-02T05:39:27+00:00",
+      "collection_finished": "2026-08-02T06:13:39+00:00",
+      "candidate_count": 119,
+      "eligible_count": 23
+    },
+    {
+      "match_id": "M-20260802-4e7b1529",
+      "collection_started": "2026-08-03T00:25:36+00:00",
+      "collection_finished": "2026-08-03T00:55:42+00:00",
+      "candidate_count": 11,
+      "eligible_count": 5
+    },
+    {
+      "match_id": "M-20260802-6b89616b",
+      "collection_started": "2026-08-02T19:53:20+00:00",
+      "collection_finished": "2026-08-02T20:29:43+00:00",
+      "candidate_count": 57,
+      "eligible_count": 18
+    },
+    {
+      "match_id": "M-20260802-6ec2376e",
+      "collection_started": "2026-08-02T23:42:56+00:00",
+      "collection_finished": "2026-08-03T00:16:33+00:00",
+      "candidate_count": 29,
+      "eligible_count": 8
+    },
+    {
+      "match_id": "M-20260802-b83301bf",
+      "collection_started": "2026-08-02T06:28:36+00:00",
+      "collection_finished": "2026-08-02T06:56:08+00:00",
+      "candidate_count": 35,
+      "eligible_count": 12
+    },
+    {
+      "match_id": "M-20260802-e6ea946f",
+      "collection_started": "2026-08-02T23:06:29+00:00",
+      "collection_finished": "2026-08-02T23:37:41+00:00",
+      "candidate_count": 17,
+      "eligible_count": 5
+    },
+    {
+      "match_id": "M-20260802-fedc9dae",
+      "collection_started": "2026-08-02T04:10:58+00:00",
+      "collection_finished": "2026-08-02T04:44:27+00:00",
+      "candidate_count": 103,
+      "eligible_count": 30
+    }
+  ],
+  "discarded_sessions": [
+    {
+      "match_id": "M-20260801-20d28515",
+      "reason": "sparse_chat_low_yield",
+      "discarded_at": "2026-08-02T04:07:33+00:00"
+    },
+    {
+      "match_id": "M-20260801-ef9cfa5a",
+      "reason": "collector_pipeline_failure",
+      "discarded_at": "2026-08-02T02:47:50+00:00"
+    },
+    {
+      "match_id": "M-20260802-69e4330e",
+      "reason": "sparse_chat_low_yield",
+      "discarded_at": "2026-08-02T05:33:17+00:00"
+    }
+  ]
+}

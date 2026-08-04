@@ -66,13 +66,16 @@ python generate_report_assets.py
 
 ### Interactive demo
 
-Score chat lines with the frozen primary hybrid (`weight7_hybrid_late`, seed 42).
-Requires `artifacts/experiments/weight_7_seed42.pt` (or `artifacts/best_model.pt`),
-`artifacts/experiments/weight7_hybrid_late_seed42.json`, and the prepared dataset.
+Score chat lines with the frozen primary hybrid. By default `predict.py` reads
+`artifacts/frozen_context_hybrid_config.json` (currently `weight7_hybrid_late`,
+seed 42 → `artifacts/experiments/weight_7_seed42.pt` / `artifacts/best_model.pt`)
+and the prepared L2DTnH train split for the lexical arm.
 
 ```bash
 python predict.py
-python predict.py --once "gg ez mid diff"
+python predict.py --once "gg ez mid diff" --show-tokens
+python predict.py --csv                       # data/final_test/final_chat.csv
+python predict.py --csv data/final_test/final_chat.csv --output artifacts/final_test_predictions.csv
 ```
 
 `run_context_hybrid_experiments.py` screens same-match context windows (`K∈{1,2,3}`),
@@ -102,25 +105,41 @@ League window and runs local OCR. It does not inject input, inspect game memory,
 or label messages. Use it only for your own matches or voluntarily supplied
 logs under `FINAL_TEST_PROTOCOL.md`.
 
-Use borderless or windowed mode. First open chat in a Practice Tool or custom
-game, then select only the chat rectangle:
+Use borderless or windowed mode. Finish loading into a Practice Tool or custom
+game (lobby/champion-select chat is rejected), open the in-game chat, then
+select only the chat rectangle:
 
 ```bash
+python collect_chat.py list-windows  # optional troubleshooting
 python collect_chat.py calibrate
 python collect_chat.py collect
+python collect_chat.py diagnose --session M-YYYYMMDD-xxxxxxxx  # offline replay gate
+python collect_chat.py discard-session --session M-YYYYMMDD-xxxxxxxx  # technical failures only
 python collect_chat.py review
 python collect_chat.py status
 ```
 
 Run `collect` once per match. The command waits for the read-only Live Client
-Data API to become available and stops after the match ends. Only messages
-actually rendered on the observed player's screen can be captured; muted,
-disabled, faded, filtered, or enemy team-only messages are unavailable.
+Data API to become available and stops after the match ends. Default polling is
+**0.75s**. The collector filters system/ping noise, emits high-confidence player
+lines on first trailing sighting (uncertain/low-confidence still need a second
+frame), keeps pending across a few missed frames, and aborts if the queued rate
+exceeds 30 candidates/minute. Only messages actually rendered on the observed
+player's screen can be captured; muted, disabled, faded, filtered, or enemy
+team-only messages are unavailable. Keep in-game chat open (Enter) during
+collection so lines remain visible across polls.
+
+Before reviewing a suspicious session, run `diagnose` twice and confirm the
+replay fingerprint matches with ≤150 emitted candidates. Mark irrecoverable
+collector failures with `discard-session` so they never enter
+`final_chat.csv`.
 
 OCR candidates and screenshots stay in the gitignored
 `data/final_test/raw/` directory. During `review`, compare every candidate with
 its screenshot, correct transcription errors, and exclude only empty, system,
-non-player, or duplicate OCR records. The command removes roster names, Riot
+non-player, or duplicate OCR records. Drop shortcuts: `s` = system, `o` = OCR
+duplicate, `n` = non-player; or `d` then `s`/`o`/`e`/`n` (Enter repeats the
+last drop reason). The command removes roster names, Riot
 IDs, and links, then rebuilds:
 
 - `data/final_test/final_chat.csv` — anonymous text with blank human-label fields
