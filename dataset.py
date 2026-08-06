@@ -267,6 +267,7 @@ def get_dataloaders(
     include_test: bool = True,
     context_k: int | None = None,
     max_len: int | None = None,
+    vocab: Vocab | None = None,
 ):
     """Build deterministic DataLoaders and a training-only vocabulary.
 
@@ -276,6 +277,9 @@ def get_dataloaders(
 
     When ``context_k`` is set, each example concatenates same-``group_id``
     neighbors and the vocabulary reserves context marker tokens.
+
+    Pass ``vocab`` to restore a frozen checkpoint vocabulary instead of rebuilding
+    from the current ``MIN_FREQ`` / train tokens.
     """
     train_df, val_df, test_df = load_splits(csv_path)
     resolved_max_len = config.MAX_LEN if max_len is None else max_len
@@ -296,12 +300,13 @@ def get_dataloaders(
             return (str(text).split() for text in frame[text_column])
         return (clean_text(t) for t in frame["text"])
 
-    vocab = Vocab.build(
-        _token_lists(train_df),
-        max_size=config.MAX_VOCAB_SIZE,
-        min_freq=config.MIN_FREQ,
-        reserved_tokens=reserved,
-    )
+    if vocab is None:
+        vocab = Vocab.build(
+            _token_lists(train_df),
+            max_size=config.MAX_VOCAB_SIZE,
+            min_freq=config.MIN_FREQ,
+            reserved_tokens=reserved,
+        )
     train_ds = ToxicChatDataset(
         train_df, vocab, resolved_max_len, text_column=text_column
     )

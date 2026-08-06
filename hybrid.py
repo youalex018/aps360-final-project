@@ -1,7 +1,7 @@
 """Late fusion of TF-IDF LinearSVC scores with LSTM probabilities.
 
 The lexical scorer is always fit on train text only. Blend weight ``alpha`` and
-the decision threshold are chosen on validation toxic-class F1; test is scored
+the decision threshold are chosen on validation toxic-class F2; test is scored
 only with already-frozen fusion parameters.
 """
 from __future__ import annotations
@@ -12,6 +12,7 @@ from pathlib import Path
 
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.pipeline import FeatureUnion
 from sklearn.svm import LinearSVC
 
 import config
@@ -31,9 +32,29 @@ def fuse(p_lstm, p_svm, alpha: float) -> np.ndarray:
     return alpha * p_lstm + (1.0 - alpha) * p_svm
 
 
+def build_lexical_vectorizer() -> FeatureUnion:
+    """Word TF-IDF plus character n-grams for OCR typos and unseen compounds."""
+    return FeatureUnion(
+        [
+            (
+                "word",
+                TfidfVectorizer(tokenizer=clean_text, token_pattern=None),
+            ),
+            (
+                "char",
+                TfidfVectorizer(
+                    analyzer="char_wb",
+                    ngram_range=(3, 5),
+                    min_df=1,
+                ),
+            ),
+        ]
+    )
+
+
 def fit_lexical_scorer(train_texts, train_labels):
     """Fit the same TF-IDF + LinearSVC recipe as ``baseline.py`` on train only."""
-    vectorizer = TfidfVectorizer(tokenizer=clean_text, token_pattern=None)
+    vectorizer = build_lexical_vectorizer()
     x_train = vectorizer.fit_transform(train_texts)
     clf = LinearSVC(class_weight="balanced", random_state=config.SEED)
     clf.fit(x_train, train_labels)
@@ -46,6 +67,14 @@ def svm_probabilities(clf, vectorizer, texts) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-np.asarray(margins, dtype=np.float64)))
 
 
+def _f_beta(precision: float, recall: float, beta: float) -> float:
+    beta_sq = beta * beta
+    denom = beta_sq * precision + recall
+    if denom <= 0.0:
+        return 0.0
+    return (1.0 + beta_sq) * precision * recall / denom
+
+
 def select_fusion_on_validation(
     y_val,
     p_lstm,
@@ -53,8 +82,9 @@ def select_fusion_on_validation(
     *,
     alpha_grid=config.ALPHA_GRID,
     threshold_grid=config.THRESHOLD_GRID,
+    beta: float = config.DEFAULT_FUSION_SELECTION_BETA,
 ) -> dict:
-    """Jointly choose alpha and threshold by validation toxic-class F1."""
+    """Jointly choose alpha and threshold by validation toxic-class F-beta (default F1)."""
     y_val = np.asarray(y_val, dtype=np.int64)
     best: dict | None = None
     for alpha in alpha_grid:
@@ -62,6 +92,9 @@ def select_fusion_on_validation(
         for threshold in threshold_grid:
             metrics = metric_summary(y_val, blended, loss=0.0, threshold=threshold)
             metrics.pop("loss", None)
+            f_beta = _f_beta(metrics["precision"], metrics["recall"], beta)
+            metrics["f_beta"] = float(f_beta)
+            metrics["selection_beta"] = float(beta)
             candidate = {
                 "alpha": float(alpha),
                 "threshold": float(threshold),
@@ -71,16 +104,18 @@ def select_fusion_on_validation(
                 best = candidate
                 continue
             key = (
+                f_beta,
                 metrics["f1"],
-                metrics["precision"],
+                metrics["recall"],
                 metrics["balanced_accuracy"],
                 -abs(threshold - 0.5),
                 -threshold,
                 -abs(alpha - 0.5),
             )
             incumbent = (
+                best["metrics"]["f_beta"],
                 best["metrics"]["f1"],
-                best["metrics"]["precision"],
+                best["metrics"]["recall"],
                 best["metrics"]["balanced_accuracy"],
                 -abs(best["threshold"] - 0.5),
                 -best["threshold"],
@@ -128,7 +163,18 @@ def late_fuse_lstm_run(
             "Validation label order mismatch between LSTM and SVM paths."
         )
 
-    selected = select_fusion_on_validation(y_for_fusion, p_lstm_val, p_svm_val)
+    selection_beta = float(
+        config.FUSION_SELECTION_BETA
+        if hybrid_config_id.endswith("_char_f2_hybrid_late")
+        or "char_f2" in hybrid_config_id
+        else config.DEFAULT_FUSION_SELECTION_BETA
+    )
+    selected = select_fusion_on_validation(
+        y_for_fusion,
+        p_lstm_val,
+        p_svm_val,
+        beta=selection_beta,
+    )
     hybrid_spec = replace(
         experiment_config_from_dict(lstm_result["experiment_config"]),
         config_id=hybrid_config_id,
@@ -143,6 +189,8 @@ def late_fuse_lstm_run(
         threshold=selected["threshold"],
     )
     validation.pop("loss", None)
+    validation["f_beta"] = selected["metrics"].get("f_beta")
+    validation["selection_beta"] = selection_beta
 
     result = {
         "schema_version": 2,
@@ -153,7 +201,9 @@ def late_fuse_lstm_run(
         "checkpoint_path": lstm_result["checkpoint_path"],
         "base_configuration_id": lstm_result["configuration_id"],
         "base_run_name": lstm_result["run_name"],
-        "selection_metric": "validation toxic-class F1 (late fusion)",
+        "selection_metric": (
+            f"validation toxic-class F{selection_beta:g} (late fusion)"
+        ),
         "threshold_grid": list(config.THRESHOLD_GRID),
         "alpha_grid": list(config.ALPHA_GRID),
         "best_epoch": lstm_result.get("best_epoch"),
@@ -170,6 +220,8 @@ def late_fuse_lstm_run(
             "method": "late_linear_blend",
             "alpha": selected["alpha"],
             "threshold": selected["threshold"],
+            "selection_beta": selection_beta,
+            "lexical_features": "word_tfidf+char_wb_3_5",
             "svm_fit_split": "train",
             "selection_split": "val",
             "test_used_for_selection": False,

@@ -1,12 +1,4 @@
 \begin{filecontents*}{references.bib}
-@misc{kaggle_tribunal,
-  author = {Shengxue, S.},
-  title = {League of Legends Tribunal Chatlogs},
-  year = {2020},
-  howpublished = {\url{https://www.kaggle.com/datasets/simshengxue/league-of-legends-tribunal-chatlogs}},
-  note = {Kaggle}
-}
-
 @inproceedings{ave2026,
   author = {Ave, Jonas and Pekaric, Irdin and Frohner, Matthias and Apruzzese, Giovanni},
   title = {{``bot lane noob'': Towards Practical Deployment of NLP-based Toxicity Detectors in Video Games}},
@@ -102,39 +94,28 @@
 
 \section*{Introduction}
 
-Online gaming communities are widely known for toxic chat. League of Legends (LoL) is a clear example: matches move quickly, messages are short, and players lean on slang that general moderation tools often miss, such as ``inting'' (intentionally feeding) or ``bot diff'' (blaming the bottom lane). This project takes one raw LoL chat message as input and predicts whether it is toxic or non-toxic. The goal is a domain-specific classifier that can support automated moderation where generic toxicity tools fail.
+League of Legends (LoL) chat is short, slang-heavy, and hard for generic toxicity filters to handle. Phrases like ``inting'' (intentionally feeding) or ``bot diff'' (blaming bot lane) are common. This project classifies one raw chat line as toxic or non-toxic, and its goal is a domain-specific classifier that can support automated moderation where generic toxicity tools fail.
 
-Machine learning is a reasonable approach because word order and tone can flip meaning---for example, a sincere ``nice'' versus a sarcastic ``nice play''---in ways that fixed keyword lists handle poorly. I compare a TF--IDF + linear SVM bag-of-words baseline, an LSTM sequence model \cite{hochreiter1997}, and a late-fusion hybrid that blends the two. The hybrid is the primary model because many messages are only one or two tokens long, so the SVM's lexical cues remain useful alongside the neural net. Project difficulty is high: expert labels are scarce and imbalanced ($\sim$9\% toxic), chat is extremely short, and live-game APIs do not expose chat text, so final evaluation required building a passive OCR collector for never-before-seen matches.
+Machine learning fits because tone depends on context: a sincere ``nice'' is fine, but ``nice play'' can be sarcasm. I compare a TF--IDF + linear SVM baseline, an LSTM \cite{hochreiter1997}, and a late-fusion hybrid of the two. The hybrid is my primary model because many lines are only one or two tokens, so lexical cues still help. The problem is tough: labels are scarce and about 9\% toxic, messages are tiny, and Riot APIs do not expose chat, so I built a passive Optical Character Recognition (OCR) collector for fresh live matches that I play myself.
 
 \section*{Illustration}
 
-Figure~\ref{fig:overview} shows the end-to-end pipeline: clean one message, score it with both the LSTM and the SVM, fuse the scores, and emit a toxic / non-toxic decision. The same frozen recipe is applied unchanged to the fresh OCR-labelled final-test set.
+Figure~\ref{fig:overview} is the full pipeline: clean a message, score it with the LSTM and the SVM, fuse the scores, and decide toxic or non-toxic. I reuse the same frozen recipe on locked OCR final-test batches.
 
 \begin{figure}[!h]
   \centering
-  \includegraphics[width=0.95\textwidth]{architecture_comparison.png}
+  \includegraphics[width=0.90\textwidth]{architecture_comparison.png}
   \caption{Primary late-fusion hybrid: cleaned LoL chat $\rightarrow$ LSTM probability and SVM margin $\rightarrow$ fused toxic / non-toxic decision.}
   \label{fig:overview}
 \end{figure}
 
 \section*{Background \& Related Work}
 
-Toxicity detection has a large general-web literature. The Jigsaw Toxic Comment Challenge \cite{jigsaw} popularized multi-label toxicity classification on Wikipedia-style text and showed that models trained on general internet language need domain adaptation. Davidson et al.\ \cite{davidson2017} separate offensive language from targeted hate speech, which matters when defining LoL ``toxicity'' thresholds that go beyond swear words. Kwak et al.\ \cite{kwak2015} study cyberbullying and toxic behaviour specifically in team-competition games, including LoL, and motivate domain-specific tools rather than off-the-shelf filters.
-
-On the modelling side, Hochreiter and Schmidhuber's LSTM \cite{hochreiter1997} remains a standard sequence encoder for short text when transformer fine-tuning is out of scope. Recent hybrid BERT + character-CNN work on toxic game chat \cite{toxic_chat_rg} supports combining lexical and neural cues. Closest to this project, Ave et al.\ release L2DTnH with message-level expert labels for LoL chat and study practical deployment of NLP toxicity detectors in games \cite{ave2026}. I use that labelled domain instead of Tribunal role proxies \cite{kaggle_tribunal}, then add a late-fusion SVM branch because single-message LSTMs underperform bag-of-words on ultra-short chat.
+Toxicity work on the open web is large. The Jigsaw Toxic Comment Challenge \cite{jigsaw} showed that models trained on general internet text need domain adaptation. Davidson et al.\ \cite{davidson2017} separate offensive language from targeted hate, which matters when deciding how harsh LoL ``toxicity'' should be. Kwak et al.\ \cite{kwak2015} look at toxic behaviour in team games like LoL and argue for domain-specific tools. For modelling, Hochreiter and Schmidhuber's LSTM \cite{hochreiter1997} is a solid short-text encoder when transformers are out of scope, and hybrid BERT + character-CNN work on game chat \cite{toxic_chat_rg} supports mixing lexical and neural cues. Closest to this project, Ave et al.\ release L2DTnH with message-level expert labels for LoL chat \cite{ave2026}. I train on that corpus and add a late-fusion SVM branch because a single-message LSTM alone loses to bag-of-words on ultra-short lines.
 
 \section*{Data Processing}
 
-An initial attempt used 100k Tribunal chat rows \cite{kaggle_tribunal} and treated speaker role as the label. That proxy fails at the message level: after cleaning, 38,912 identical texts appeared with both labels, and early SVM / LSTM models only reached 55.2\% and 54.5\% test accuracy. I therefore switched to L2DTnH, which stays in the same chat domain but provides message-level labels from eight experienced LoL players \cite{ave2026}.
-
-Cleaning: decode HTML, normalize Unicode, lowercase, collapse spaces, keep alphanumeric tokens, and expand 15 common slang shortcuts (e.g., \texttt{ff} $\rightarrow$ ``forfeit''). Incomplete rows, empty messages, and texts with conflicting expert labels are removed; repeated same-label lines are kept because spam itself can be toxic. Figure~\ref{fig:data} summarizes the pipeline. Instead of shuffling rows, each full match (\texttt{chatlog\_id}) is assigned to train / validation / test in roughly a 70/15/15 split so the same game never crosses partitions while the toxic rate stays near 9\%.
-
-\begin{figure}[!h]
-  \centering
-  \includegraphics[width=0.95\textwidth]{data_pipeline.png}
-  \caption{Expert-labelled preprocessing with counts after each quality-control step.}
-  \label{fig:data}
-\end{figure}
+I use L2DTnH, which has message-level labels from eight experienced LoL players \cite{ave2026}. Cleaning decodes HTML, normalizes Unicode, lowercases, collapses spaces, keeps alphanumeric tokens, and expands common slang (e.g., \texttt{ff} $\rightarrow$ ``forfeit''). I drop incomplete rows, empty messages, and texts with conflicting expert labels, but I keep repeated same-label lines because spam can itself be toxic. Instead of shuffling rows, I assign each full match to train / validation / test in about a 70/15/15 split so one game never crosses partitions and the toxic rate stays near 9\%.
 
 \begin{table}[!h]
 \centering
@@ -160,7 +141,7 @@ Cleaning: decode HTML, normalize Unicode, lowercase, collapse spaces, keep alpha
   Raw message & Cleaned tokens \\
   \midrule
   \texttt{its gg} & \texttt{its good game} \\
-  \texttt{gold --- elo} & \texttt{gold elo} \\
+  \texttt{gold - elo} & \texttt{gold elo} \\
   \texttt{gj} & \texttt{good job} \\
   \bottomrule
   \end{tabular}
@@ -171,49 +152,54 @@ Cleaning: decode HTML, normalize Unicode, lowercase, collapse spaces, keep alpha
 
 \section*{Architecture}
 
-The primary model is a late-fusion hybrid of a single-message LSTM and a TF--IDF LinearSVC (Figure~\ref{fig:overview}). Only this frozen recipe---not every intermediate experiment---is reported below.
+For Batch~A I froze a late-fusion hybrid of the LSTM with toxic class weight 7 and a word-level TF--IDF SVM (Figure~\ref{fig:overview}). After seeing Batch~A fail, I screened character $n$-grams on the lexical branch using validation only, without touching Batch~A labels again. Selecting the fusion weight and threshold by F2 (more weight on recall) raised recall but dropped mean validation toxic F1 to 0.614, under my 0.671 freeze gate. The same character features with ordinary F1 selection hit mean validation F1 0.688, so I froze that character-$n$-gram hybrid for Batch~B.
 
 \begin{itemize}
-  \setlength{\itemsep}{0.15em}
+  \setlength{\itemsep}{0.1em}
   \setlength{\parsep}{0pt}
-  \item \textbf{Input:} one cleaned message (same pipeline as above); \texttt{MAX\_LEN}=50
-  \item \textbf{Embedding:} learned 100-D token vectors; vocab size \HybridVocabSize{} (train only)
-  \item \textbf{LSTM:} \HybridLayers{} layers, hidden size \HybridHiddenDimension{}, dropout \HybridDropout; last time step; \HybridParameters{} parameters
+  \item \textbf{Input / embedding:} cleaned message, truncated or padded to 50 tokens; 100-D embeddings; vocab \HybridVocabSize{} (train only)
+  \item \textbf{LSTM:} \HybridLayers{} layers, hidden \HybridHiddenDimension{}, dropout \HybridDropout; last time step; \HybridParameters{} parameters
   \item \textbf{Training:} Adam (lr $10^{-3}$), batch 64, toxic class weight 7, early stop on validation toxic F1 (patience 3)
-  \item \textbf{SVM branch:} same TF--IDF + LinearSVC as the baseline (fit on train only)
-  \item \textbf{Fusion:} $\alpha\,p_{\mathrm{LSTM}}+(1-\alpha)\sigma(\mathrm{margin}_{\mathrm{SVM}})$; the deployed seed-42 run froze $\alpha=0.3$ and threshold $0.60$ on validation
+  \item \textbf{SVM branch (Batch~B):} word TF--IDF plus character $n$-grams of length 3--5, then LinearSVC (fit on train only)
+  \item \textbf{Fusion:} $\alpha\,p_{\mathrm{LSTM}}+(1-\alpha)\sigma(\mathrm{margin}_{\mathrm{SVM}})$; Batch~A freeze $\alpha=0.3$, threshold $0.60$; Batch~B freeze $\alpha\in\{0.2,0.0,0.0\}$, thresholds $\in\{0.60,0.55,0.55\}$
 \end{itemize}
 
-Ablations screened on validation only included stronger regularization, a smaller LSTM, a bidirectional LSTM, and same-match context windows ($K=1,2,3$). Validation preferred the single-message hybrid (val F1 \HybridValidationFOne$\pm$\HybridValidationFOneStd). The LSTM alone stayed below the SVM on the grouped test, and context alone peaked at validation F1 \ContextBestValidationFOne.
+On validation I also tried stronger regularization, a smaller LSTM, a bidirectional LSTM, same-match context windows ($K=1,2,3$), and raising the vocabulary minimum count so rare tokens map to a shared unknown token. The single-message hybrid still won (val F1 \HybridValidationFOne$\pm$\HybridValidationFOneStd). Context alone peaked at validation F1 \ContextBestValidationFOne. In short, more architecture searching did not beat late fusion of the simple LSTM with a strong lexical SVM.
 
 \section*{Baseline Model}
 
-The baseline is a classic text classifier: TF--IDF features with a class-weighted linear SVM (LinearSVC). It is fast, lightly tuned, and uses the same cleaning and match-grouped splits as the neural models, so it fairly tests whether word counts alone suffice. Its validation toxic-class F1 was \BaselineValidationFOne; that baseline was left unchanged after selection. Because only about 9\% of messages are toxic, overall accuracy can look strong while still missing many toxic cases, so results emphasize toxic F1 and balanced accuracy.
+The baseline is TF--IDF with a class-weighted LinearSVC, trained with the same cleaning and match-grouped splits as the neural models. Its validation toxic-class F1 was \BaselineValidationFOne. Only about 9\% of messages are toxic, so raw accuracy can look fine while missing many toxic lines. I focus on toxic F1 and balanced accuracy instead. The point of this baseline is simple: if a fast bag-of-words model already does well, the LSTM has to beat it on the same data, not just look more complicated.
 
 \section*{Quantitative Results}
 
-Table~\ref{tab:results} reports accuracy, balanced accuracy, and toxic-class precision / recall / F1 on the held-out grouped test (2,134 messages / 16 matches). The hybrid reaches mean toxic F1 \HybridFOne$\pm$\HybridFOneStd across three seeds, above the SVM's \BaselineFOne{} and the LSTM-only \LSTMFOne$\pm$\LSTMFOneStd. On seed 42, fusion raised true positives relative to a pure lexical miss pattern while cutting false positives versus the baseline (\HybridTruePositives{} TP / \HybridFalsePositives{} FP vs.\ \BaselineTruePositives{} / \BaselineFalsePositives). Learned blend weights were $\alpha\in\{\HybridAlphas\}$.
+Table~\ref{tab:results} shows accuracy, balanced accuracy, and toxic-class precision / recall / F1 on the held-out development test and on locked fresh OCR Batch~A. Toxic F1 is the main score I care about (harmonic mean of precision and recall on the toxic class). On development, the hybrid reaches mean toxic F1 \HybridFOne$\pm$\HybridFOneStd across three seeds, a bit above the SVM (\BaselineFOne) and the LSTM alone (\LSTMFOne$\pm$\LSTMFOneStd). Blend weights were $\alpha\in\{\HybridAlphas\}$, and one seed even chose $\alpha=0$ (pure SVM). So on in-domain held-out matches the hybrid is only a small win, not a large one.
+
+On Batch~A the story flips. The hybrid's toxic F1 falls to \FreshHybridFOne{}, under the SVM's \FreshBaselineFOne{}, with recall only \FreshHybridRecall{} (14 of 49 toxic lines). Balanced accuracy also drops. As a post-hoc check on Batch~A only (I did not re-tune on it), ROC-AUC was 0.690 / 0.700 / 0.681 for hybrid / LSTM / SVM. An oracle hybrid threshold would only reach F1 0.434 versus the frozen 0.368, so the drop looks more like missing vocabulary than a bad threshold. Takeaway: the hybrid looks competitive on L2DTnH, but it does not meet expectations on fresh live chat.
 
 \begin{table}[!h]
 \centering
 \small
-\setlength{\tabcolsep}{5pt}
-\begin{tabular}{lrrrrr}
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{llrrrrr}
 \toprule
-Model & Accuracy & Balanced acc. & Precision & Recall & Toxic F1 \\
+Split & Model & Acc. & Bal.\ acc. & Prec. & Rec. & Toxic F1 \\
 \midrule
-TF--IDF + LinearSVC & \BaselineAccuracy & \textbf{\BaselineBalancedAccuracy} & \BaselinePrecision & \textbf{\BaselineRecall} & \BaselineFOne \\
-Single-message LSTM & \LSTMAccuracy & \LSTMBalancedAccuracy & \LSTMPrecision & \LSTMRecall & \LSTMFOne$\pm$\LSTMFOneStd \\
-Late fusion hybrid & \textbf{\HybridAccuracy} & \HybridBalancedAccuracy & \textbf{\HybridPrecision} & \HybridRecall & \textbf{\HybridFOne$\pm$\HybridFOneStd} \\
+Dev & TF--IDF + LinearSVC & \BaselineAccuracy & \textbf{\BaselineBalancedAccuracy} & \BaselinePrecision & \textbf{\BaselineRecall} & \BaselineFOne \\
+Dev & Single-message LSTM & \LSTMAccuracy & \LSTMBalancedAccuracy & \LSTMPrecision & \LSTMRecall & \LSTMFOne$\pm$\LSTMFOneStd \\
+Dev & Late fusion hybrid & \textbf{\HybridAccuracy} & \HybridBalancedAccuracy & \textbf{\HybridPrecision} & \HybridRecall & \textbf{\HybridFOne$\pm$\HybridFOneStd} \\
+\midrule
+Fresh A & TF--IDF + LinearSVC & \FreshBaselineAccuracy & \textbf{\FreshBaselineBalancedAccuracy} & \FreshBaselinePrecision & \textbf{\FreshBaselineRecall} & \textbf{\FreshBaselineFOne} \\
+Fresh A & Single-message LSTM & \FreshLSTMAccuracy & \FreshLSTMBalancedAccuracy & \FreshLSTMPrecision & \FreshLSTMRecall & \FreshLSTMFOne \\
+Fresh A & Late fusion hybrid & \textbf{\FreshHybridAccuracy} & \FreshHybridBalancedAccuracy & \textbf{\FreshHybridPrecision} & \FreshHybridRecall & \FreshHybridFOne \\
 \bottomrule
 \end{tabular}
-\caption{Grouped development test (2,134 messages / 16 matches). Hybrid $=$ primary model.}
+\caption{Development test (2,134 msgs / 16 matches) and locked fresh Batch~A (\FreshMessages{} msgs / \FreshMatches{} matches).}
 \label{tab:results}
 \end{table}
 
 \section*{Qualitative Results}
 
-Table~\ref{tab:qual} uses locked fresh-test outputs rather than hand-written probes. The hybrid catches direct insults with familiar lexical cues, but misses short LoL-specific put-downs and even one severe phrase. False positives often contain profanity or toxicity-related words without a targeted insult.
+Table~\ref{tab:qual} shows locked Batch~A outputs. The hybrid catches direct insults with familiar words such as ``stfu feeding dog,'' which look a lot like training examples. It misses short LoL put-downs like ``jg diff already'' and even the severe line ``kill yourself,'' which never appear as toxic training phrases in that form. False positives often have swear words or toxicity-related vocabulary without a clear target, such as ``fuck this game'' or mentioning that someone ``called me a slur.'' Takeaway: the model behaves like a lexical detector for older insult patterns, not like a reliable judge of modern LoL toxicity.
 
 \begin{table}[!h]
 \centering
@@ -230,15 +216,17 @@ Message (cleaned) & Gold & Hybrid & Note \\
 \texttt{report ... called me a slur} & non-toxic & toxic & mention mistaken for abuse \\
 \bottomrule
 \end{tabular}
-\caption{Representative locked fresh-test successes and errors.}
+\caption{Representative locked Batch~A successes and errors.}
 \label{tab:qual}
 \end{table}
 
 \section*{Evaluate Model on New Data}
 
-The grouped L2DTnH test informed development, so it is not a pure final answer. After freezing preprocessing, vocabulary, architecture, $\alpha$, and thresholds, I collected \FreshMessages{} anonymized chat lines from \FreshMatches{} new live LoL matches between August 1--4, 2026. A passive Windows OCR tool (\texttt{collect\_chat.py}) captured only the calibrated chat region, while the Live Client Data API verified match boundaries. I manually corrected OCR against screenshots, removed identifiers, and labelled all messages with a written binary rubric. The locked set contains \FreshToxic{} toxic and \FreshNonToxic{} non-toxic messages (\FreshToxicPrevalence{} toxic). My primary labels were frozen before inference; independent agreement checking is still pending.
+The grouped L2DTnH test shaped development, so it is not a pure final answer. After freezing preprocessing, vocabulary, architecture, fusion weight $\alpha$, and decision thresholds on validation, I collected two locked OCR batches of anonymized live LoL chat with a passive Windows OCR collector and Live Client Data for match boundaries. Batch~A has \FreshMessages{} messages from \FreshMatches{} matches (August 1 to 4, 2026; \FreshToxic{} toxic). I labelled them myself with a written binary rubric before inference and did not measure agreement. These samples never changed hyperparameters or thresholds.
 
-These samples never influenced hyperparameters, checkpoint selection, fusion weight, or thresholds. I ran the seed-42 hybrid once, then evaluated its saved LSTM and SVM branch scores at their already-frozen thresholds. Table~\ref{tab:fresh} shows that the hybrid did not meet expectations: it caught only \FreshTruePositives{} of \FreshToxic{} toxic messages. Its higher precision came from making fewer toxic predictions, while the SVM branch recovered more toxic messages and achieved the best fresh toxic F1.
+Table~\ref{tab:results} and Figure~\ref{fig:freshconfusion} show the hybrid did not meet expectations on Batch~A: it only caught \FreshTruePositives{} of \FreshToxic{} toxic messages, and the SVM branch had the best toxic F1. Accuracy looks high (\FreshHybridAccuracy{}), but that is close to always predicting non-toxic (\FreshAllSafeAccuracy{}), so it is not a success metric here.
+
+Batch~B is a second sealed set (\BatchBMessages{} messages / \BatchBMatches{} matches, \BatchBToxic{} toxic). I opened it only after freezing the character-$n$-gram hybrid on L2DTnH validation (mean validation F1 0.688 $>$ 0.671). Table~\ref{tab:batchb} is that locked estimate. The improved recipe still does not meet expectations: hybrid toxic F1 is only \BatchBHybridFOne{} with recall \BatchBHybridRecall{} (very few toxic catches). On this small set the LSTM branch alone is strongest (\BatchBLSTMFOne{}), which is surprising and may not be stable with only \BatchBToxic{} positives. Takeaway: both fresh batches say the primary hybrid is too conservative for moderation, even after a validation-only lexical upgrade.
 
 \begin{table}[!h]
 \centering
@@ -246,33 +234,35 @@ These samples never influenced hyperparameters, checkpoint selection, fusion wei
 \setlength{\tabcolsep}{5pt}
 \begin{tabular}{lrrrrr}
 \toprule
-Model & Acc. & Bal.\ acc. & Prec. & Recall & Toxic F1 \\
+Model & Acc. & Bal.\ acc. & Prec. & Rec. & Toxic F1 \\
 \midrule
-TF--IDF + LinearSVC & \FreshBaselineAccuracy & \textbf{\FreshBaselineBalancedAccuracy} & \FreshBaselinePrecision & \textbf{\FreshBaselineRecall} & \textbf{\FreshBaselineFOne} \\
-Single-message LSTM & \FreshLSTMAccuracy & \FreshLSTMBalancedAccuracy & \FreshLSTMPrecision & \FreshLSTMRecall & \FreshLSTMFOne \\
-Late fusion hybrid & \textbf{\FreshHybridAccuracy} & \FreshHybridBalancedAccuracy & \textbf{\FreshHybridPrecision} & \FreshHybridRecall & \FreshHybridFOne \\
+TF--IDF + LinearSVC & \BatchBBaselineAccuracy & \BatchBBaselineBalancedAccuracy & \BatchBBaselinePrecision & \BatchBBaselineRecall & \BatchBBaselineFOne \\
+Single-message LSTM & \BatchBLSTMAccuracy & \BatchBLSTMBalancedAccuracy & \BatchBLSTMPrecision & \BatchBLSTMRecall & \BatchBLSTMFOne \\
+Late fusion hybrid & \BatchBHybridAccuracy & \BatchBHybridBalancedAccuracy & \BatchBHybridPrecision & \BatchBHybridRecall & \BatchBHybridFOne \\
 \bottomrule
 \end{tabular}
-\caption{Locked fresh test (\FreshMessages{} messages / \FreshMatches{} matches). All branch thresholds were frozen before labels were opened.}
-\label{tab:fresh}
+\caption{Locked fresh Batch~B (\BatchBMessages{} msgs / \BatchBMatches{} matches). Thresholds frozen before labels were opened.}
+\label{tab:batchb}
 \end{table}
 
 \begin{figure}[!h]
   \centering
-  \includegraphics[width=0.95\textwidth]{fresh_confusion.png}
-  \caption{Fresh-test confusion matrices. The hybrid reduced false alarms to \FreshFalsePositives{} but missed \FreshFalseNegatives{} toxic messages.}
+  \includegraphics[width=0.75\textwidth]{fresh_confusion.png}
+  \caption{Batch~A confusion matrices. Hybrid false alarms \FreshFalsePositives{}; missed toxic \FreshFalseNegatives{}.}
   \label{fig:freshconfusion}
 \end{figure}
 
 \section*{Discussion}
 
-On the development grouped test, the hybrid's modest mean toxic-F1 gain over the SVM (\HybridMinusBaselineFOne) suggested that sequence and lexical scores complemented each other. That result did not transfer. The deployed seed-42 hybrid fell from \HybridSeedFortyTwoFOne{} development F1 to \FreshHybridFOne{} fresh F1, a drop of \FreshHybridSeedFortyTwoFOneDrop. The SVM branch reached \FreshBaselineFOne{}, beating the hybrid by \FreshSVMLiftOverHybridFOne{} F1, although the hybrid had higher precision and half as many false positives (13 versus 25).
+I do not think the primary hybrid is performing well enough for real chat moderation. On development it barely beat a strong SVM. On Batch~A that small edge disappeared, and on Batch~B the hybrid got worse still. The honest result is a failed transfer, not a deployable detector.
 
-Accuracy alone hides the failure: \FreshHybridAccuracy{} is only 0.003 above an all-non-toxic classifier (\FreshAllSafeAccuracy). The hybrid recognized explicit insults such as ``stfu feeding dog,'' but missed indirect or domain-specific abuse such as ``skill issue,'' ``jg diff,'' and ``GG EZ.'' It also over-flagged untargeted frustration and mentions of abuse. The fresh toxic rate (\FreshToxicPrevalence{}) was higher than L2DTnH's 9.2\%, and the source, time period, OCR noise, and slang all shifted together. I therefore cannot attribute the drop to one cause, but the locked evaluation shows that the hybrid is too conservative for deployment and that the simpler SVM generalizes better on this sample.
+What went wrong is clearer than ``domain shift'' as a vague excuse. In the 10,050-message training split, phrases that show up a lot in Batch~A errors (\texttt{diff}, \texttt{gg ez}, \texttt{skill issue}, \texttt{dogwater}, \texttt{hardstuck}, \texttt{clown}, \texttt{monkey}, \texttt{braindead}, \texttt{touch grass}, \texttt{gap}, \texttt{kys}, \texttt{kill yourself}) each appear zero times. Meanwhile \texttt{noob} (128 rows, 96\% toxic) and \texttt{stfu} (35 rows, 97\% toxic) are common. My labelling rule also differs from L2DTnH: I mark game sarcasm like ``GG EZ'' toxic and untargeted frustration like ``fuck this game'' non-toxic, while L2DTnH almost always treats \texttt{stfu}-style swearing as toxic. So the model over-flags familiar swear words and under-flags modern put-downs it never saw.
+
+Character $n$-grams helped on validation (F1 selection froze at 0.688 after F2 failed the gate), but Batch~B shows that was not enough for live chat. What I learned is that for this problem, covering current slang and matching the label definition matter more than stacking another neural trick. The project is still hard in a fair way: short imbalanced chat, no public API for text, and OCR-labelled fresh matches. Poor fresh performance is disappointing, but it is explained by the data gap rather than a broken training loop.
 
 \section*{Ethical Considerations}
 
-Automated chat moderation can wrongly punish players (false positives) or miss harassment (false negatives), and both errors have social and account-standing consequences. Training labels come from expert annotators but remain subjective and historically situated; slang drifts with each patch, so a frozen model can over-flag newly benign phrases or miss new insults. The OCR final-test collector processes only voluntarily supplied local match windows and strips player identifiers, but any deployment would still need human review, clear appeal paths, and ongoing re-annotation rather than silent automatic bans. A limitation of the training data is that it reflects English LoL chat from specific sources and may not transfer to other games, languages, or cultural norms around trash talk.
+Wrong toxic flags can punish players, and missed harassment leaves people unprotected. Both errors matter here because my hybrid already makes both kinds of mistakes. Labels are subjective, and slang changes with every patch. Fresh-test labels are from one annotator with a written rubric and no agreement check, so edge cases are uncertain. The OCR collector only looks at voluntarily supplied local match windows and strips identifiers, but any real deployment would still need human review, clear appeals, and ongoing re-labelling rather than silent automatic bans.
 
 {\small\noindent\textit{AI use:} Cursor agents assisted with code, figures, and editing. Metrics come from repository scripts checked against saved result files.}
 

@@ -85,6 +85,22 @@ then opens the grouped test once. Artifacts land under `artifacts/` as
 `frozen_context_hybrid_config.json`, `context_hybrid_metrics.json`, and
 `context_hybrid_experiment_summary.json`.
 
+After Batch~A, `run_improved_hybrid_screen.py` screens character n-gram lexical
+branches (`weight7_char_f1_hybrid_late` / F2 variants) without opening Batch~A
+labels. If mean val F1 beats 0.671 it writes
+`artifacts/frozen_improved_hybrid_config.json` for Batch~B:
+
+```bash
+python run_improved_hybrid_screen.py --device cpu
+# optional: also train MIN_FREQ=2 LSTMs
+python run_improved_hybrid_screen.py --device cpu --train-minfreq2
+python predict.py --batch-b
+python evaluate_final_test.py --batch-b
+```
+
+Place Batch~B labels at `data/final_test/batch_b/final_chat.csv` only after the
+improved freeze exists.
+
 `run_lstm_experiments.py` retains the earlier single-message screen (frozen
 `weight_7`, which did not beat the SVM). Live evidence stays under
 `artifacts/` (freeze records, development metrics, `best_model.pt`) with only

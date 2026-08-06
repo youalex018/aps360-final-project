@@ -56,4 +56,9 @@ THRESHOLD_GRID = tuple(round(value / 20, 2) for value in range(1, 20))
 # Vocab is capped so rare tokens collapse to <unk>, which keeps the embedding
 # table small and improves generalization on unseen chat.
 MAX_VOCAB_SIZE = 20000
-MIN_FREQ = 1
+# Tokens seen once collapse to <unk> so the embedding for rare / OOV chat is trained.
+MIN_FREQ = 2
+# Late-fusion selection beta for the improved screen (F2). Primary freeze used F1.
+FUSION_SELECTION_BETA = 2.0
+# Default late-fusion selection for regenerating existing hybrid recipes.
+DEFAULT_FUSION_SELECTION_BETA = 1.0

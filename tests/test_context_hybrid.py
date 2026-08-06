@@ -160,7 +160,7 @@ def test_fusion_fit_uses_train_only_and_persists_threshold(tmp_path):
     test_texts = ["unused test toxic"]
     # Fit must not see test texts.
     clf, vectorizer = fit_lexical_scorer(train_texts, train_labels)
-    assert "unused" not in vectorizer.vocabulary_
+    assert "unused" not in vectorizer.transformer_list[0][1].vocabulary_
 
     p_svm = svm_probabilities(clf, vectorizer, val_texts)
     p_lstm = np.asarray([0.20, 0.80], dtype=np.float64)

@@ -44,8 +44,20 @@ DEFAULT_ERRORS = (
 DEFAULT_FIGURE = (
     config.ROOT / "reports" / "final_report" / "fresh_confusion.png"
 )
+BATCH_B_DIR = config.FINAL_TEST_ARTIFACTS_DIR / "batch_b"
+BATCH_B_PREDICTIONS = BATCH_B_DIR / "final_hybrid_predictions.csv"
+BATCH_B_METRICS = BATCH_B_DIR / "final_test_metrics.json"
+BATCH_B_ERRORS = BATCH_B_DIR / "final_test_error_analysis.csv"
+BATCH_B_FIGURE = (
+    config.ROOT / "reports" / "final_report" / "batch_b_confusion.png"
+)
+BATCH_B_CHAT = config.ROOT / "data" / "final_test" / "batch_b" / "final_chat.csv"
+GENERATED_METRICS_TEX = (
+    config.ROOT / "reports" / "final_report" / "generated_metrics.tex"
+)
 LSTM_RUN = config.EXPERIMENTS_DIR / "weight_7_seed42.json"
 HYBRID_RUN = config.EXPERIMENTS_DIR / "weight7_hybrid_late_seed42.json"
+IMPROVED_FROZEN = config.ARTIFACTS_DIR / "frozen_improved_hybrid_config.json"
 SVM_THRESHOLD = 0.5  # sigmoid(LinearSVC margin) >= 0.5 iff margin >= 0
 REQUIRED_COLUMNS = {
     "match_id",
@@ -152,7 +164,7 @@ def _write_errors(
         writer.writerows(errors)
 
 
-def _write_figure(path: Path, model_metrics: dict[str, dict]) -> None:
+def _write_figure(path: Path, model_metrics: dict[str, dict], *, n_messages: int) -> None:
     """Write an RGB PNG that pdfLaTeX/Overleaf can include reliably."""
     fig, axes = plt.subplots(1, 3, figsize=(9.6, 3.2))
     titles = {
@@ -184,7 +196,7 @@ def _write_figure(path: Path, model_metrics: dict[str, dict]) -> None:
         axis.set_xlabel("Predicted label")
         axis.set_ylabel("True label" if model == "svm" else "")
     fig.suptitle(
-        "Locked fresh-test confusion matrices (332 messages)",
+        f"Locked fresh-test confusion matrices ({n_messages} messages)",
         fontsize=11,
         y=1.02,
     )
@@ -202,18 +214,115 @@ def _write_figure(path: Path, model_metrics: dict[str, dict]) -> None:
         pass
 
 
+def _resolve_branch_runs(
+    *,
+    use_improved: bool,
+) -> tuple[Path, Path, str]:
+    """Return (lstm_json, hybrid_json, inference_run_label)."""
+    if use_improved and IMPROVED_FROZEN.is_file():
+        frozen = _load_json(IMPROVED_FROZEN)
+        top = frozen["top_two"][0]
+        config_id = top["configuration_id"]
+        seed42 = next(
+            (run for run in top["runs"] if int(run.get("seed", -1)) == 42),
+            top["runs"][0],
+        )
+        hybrid_json = config.EXPERIMENTS_DIR / f"{config_id}_seed42.json"
+        if hybrid_json.is_file():
+            hybrid = _load_json(hybrid_json)
+        else:
+            # Runs may be embedded in the freeze record.
+            hybrid = seed42
+        base_id = hybrid.get("base_configuration_id", "weight_7")
+        lstm_json = config.EXPERIMENTS_DIR / f"{base_id}_seed42.json"
+        return lstm_json, hybrid_json if hybrid_json.is_file() else IMPROVED_FROZEN, config_id
+    return LSTM_RUN, HYBRID_RUN, "weight7_hybrid_late_seed42"
+
+
+def _format_metric(value: float) -> str:
+    return f"{value:.3f}"
+
+
+def sync_batch_b_macros(payload: dict, tex_path: Path = GENERATED_METRICS_TEX) -> None:
+    """Rewrite Batch B command macros in generated_metrics.tex from a metrics JSON."""
+    dataset = payload["dataset"]
+    models = payload["models"]
+    replacements = {
+        "BatchBMessages": str(dataset["messages"]),
+        "BatchBMatches": str(dataset["matches"]),
+        "BatchBToxic": str(dataset["toxic"]),
+        "BatchBNonToxic": str(dataset["non_toxic"]),
+        "BatchBBaselineAccuracy": _format_metric(models["svm"]["accuracy"]),
+        "BatchBBaselineBalancedAccuracy": _format_metric(
+            models["svm"]["balanced_accuracy"]
+        ),
+        "BatchBBaselinePrecision": _format_metric(models["svm"]["precision"]),
+        "BatchBBaselineRecall": _format_metric(models["svm"]["recall"]),
+        "BatchBBaselineFOne": _format_metric(models["svm"]["f1"]),
+        "BatchBLSTMAccuracy": _format_metric(models["lstm"]["accuracy"]),
+        "BatchBLSTMBalancedAccuracy": _format_metric(
+            models["lstm"]["balanced_accuracy"]
+        ),
+        "BatchBLSTMPrecision": _format_metric(models["lstm"]["precision"]),
+        "BatchBLSTMRecall": _format_metric(models["lstm"]["recall"]),
+        "BatchBLSTMFOne": _format_metric(models["lstm"]["f1"]),
+        "BatchBHybridAccuracy": _format_metric(models["hybrid"]["accuracy"]),
+        "BatchBHybridBalancedAccuracy": _format_metric(
+            models["hybrid"]["balanced_accuracy"]
+        ),
+        "BatchBHybridPrecision": _format_metric(models["hybrid"]["precision"]),
+        "BatchBHybridRecall": _format_metric(models["hybrid"]["recall"]),
+        "BatchBHybridFOne": _format_metric(models["hybrid"]["f1"]),
+    }
+    text = tex_path.read_text(encoding="utf-8")
+    for name, value in replacements.items():
+        pattern = re.compile(rf"(\\newcommand{{\\{name}}}{{)[^}}]*(}})")
+        if not pattern.search(text):
+            raise ValueError(f"{tex_path} is missing \\{name}")
+        text = pattern.sub(rf"\g<1>{value}\g<2>", text)
+    tex_path.write_text(text, encoding="utf-8")
+
+
 def evaluate(
     predictions_path: Path,
     metrics_path: Path,
     errors_path: Path,
     figure_path: Path,
+    *,
+    lstm_run_path: Path | None = None,
+    hybrid_run_path: Path | None = None,
+    inference_run: str | None = None,
+    sync_tex: bool = False,
 ) -> dict:
     rows = _load_rows(predictions_path)
-    lstm_run = _load_json(LSTM_RUN)
-    hybrid_run = _load_json(HYBRID_RUN)
-    lstm_threshold = float(lstm_run["selected_threshold"])
-    hybrid_threshold = float(hybrid_run["fusion"]["threshold"])
-    hybrid_alpha = float(hybrid_run["fusion"]["alpha"])
+    lstm_path = lstm_run_path or LSTM_RUN
+    hybrid_path = hybrid_run_path or HYBRID_RUN
+    lstm_run = _load_json(lstm_path) if lstm_path.suffix == ".json" else {}
+    if hybrid_path == IMPROVED_FROZEN:
+        frozen = _load_json(hybrid_path)
+        hybrid_run = frozen["top_two"][0]["runs"][0]
+        # Prefer seed 42.
+        hybrid_run = next(
+            (
+                run
+                for run in frozen["top_two"][0]["runs"]
+                if int(run.get("seed", -1)) == 42
+            ),
+            hybrid_run,
+        )
+        inference = frozen.get("frozen_configuration_id", "improved_hybrid")
+    else:
+        hybrid_run = _load_json(hybrid_path)
+        inference = inference_run or hybrid_run.get(
+            "run_name", "weight7_hybrid_late_seed42"
+        )
+
+    lstm_threshold = float(
+        lstm_run.get("selected_threshold", hybrid_run.get("selected_threshold", 0.9))
+    )
+    fusion = hybrid_run.get("fusion", {})
+    hybrid_threshold = float(fusion.get("threshold", hybrid_run["selected_threshold"]))
+    hybrid_alpha = float(fusion.get("alpha", 0.5))
 
     labels = [int(row["human_label"]) for row in rows]
     model_predictions = {
@@ -243,7 +352,7 @@ def evaluate(
     match_ids = {row["match_id"] for row in rows}
     toxic_count = sum(labels)
     all_safe_accuracy = (len(labels) - toxic_count) / len(labels)
-    development_hybrid = hybrid_run["test"]
+    development_hybrid = hybrid_run.get("test") or {}
 
     payload = {
         "schema_version": 1,
@@ -251,8 +360,8 @@ def evaluate(
         "source_predictions": str(predictions_path.relative_to(config.ROOT)),
         "protocol": {
             "labels_locked": True,
-            "inference_run": "weight7_hybrid_late_seed42",
-            "checkpoint": hybrid_run["checkpoint_path"],
+            "inference_run": inference,
+            "checkpoint": hybrid_run.get("checkpoint_path"),
             "hybrid_alpha": hybrid_alpha,
             "thresholds_selected_on": "L2DTnH validation split",
             "test_threshold_search": False,
@@ -284,6 +393,7 @@ def evaluate(
                     "recall",
                     "f1",
                 )
+                if metric in development_hybrid
             },
         },
     }
@@ -299,7 +409,9 @@ def evaluate(
         labels,
         model_predictions["hybrid"],
     )
-    _write_figure(figure_path, model_metrics)
+    _write_figure(figure_path, model_metrics, n_messages=len(rows))
+    if sync_tex:
+        sync_batch_b_macros(payload)
     return payload
 
 
@@ -307,20 +419,52 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Evaluate locked final-test prediction probabilities"
     )
-    parser.add_argument("--predictions", type=Path, default=DEFAULT_PREDICTIONS)
-    parser.add_argument("--metrics", type=Path, default=DEFAULT_METRICS)
-    parser.add_argument("--errors", type=Path, default=DEFAULT_ERRORS)
-    parser.add_argument("--figure", type=Path, default=DEFAULT_FIGURE)
+    parser.add_argument("--predictions", type=Path, default=None)
+    parser.add_argument("--metrics", type=Path, default=None)
+    parser.add_argument("--errors", type=Path, default=None)
+    parser.add_argument("--figure", type=Path, default=None)
+    parser.add_argument(
+        "--batch-b",
+        action="store_true",
+        help="Use Batch B default paths and sync report macros",
+    )
+    parser.add_argument(
+        "--use-improved",
+        action="store_true",
+        help="Resolve thresholds from frozen_improved_hybrid_config.json",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    if args.batch_b:
+        predictions = args.predictions or BATCH_B_PREDICTIONS
+        metrics = args.metrics or BATCH_B_METRICS
+        errors = args.errors or BATCH_B_ERRORS
+        figure = args.figure or BATCH_B_FIGURE
+        sync_tex = True
+        use_improved = True
+    else:
+        predictions = args.predictions or DEFAULT_PREDICTIONS
+        metrics = args.metrics or DEFAULT_METRICS
+        errors = args.errors or DEFAULT_ERRORS
+        figure = args.figure or DEFAULT_FIGURE
+        sync_tex = False
+        use_improved = args.use_improved
+
+    lstm_path, hybrid_path, inference = _resolve_branch_runs(
+        use_improved=use_improved
+    )
     payload = evaluate(
-        args.predictions,
-        args.metrics,
-        args.errors,
-        args.figure,
+        predictions,
+        metrics,
+        errors,
+        figure,
+        lstm_run_path=lstm_path,
+        hybrid_run_path=hybrid_path,
+        inference_run=inference,
+        sync_tex=sync_tex,
     )
     print(json.dumps(payload, indent=2))
     return 0

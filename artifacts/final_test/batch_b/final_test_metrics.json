@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-06T04:41:55.191863+00:00",
+  "source_predictions": "artifacts\\final_test\\batch_b\\final_hybrid_predictions.csv",
+  "protocol": {
+    "labels_locked": true,
+    "inference_run": "weight7_char_f1_hybrid_late",
+    "checkpoint": "artifacts/experiments/weight_7_seed42.pt",
+    "hybrid_alpha": 0.2,
+    "thresholds_selected_on": "L2DTnH validation split",
+    "test_threshold_search": false
+  },
+  "dataset": {
+    "messages": 150,
+    "matches": 10,
+    "match_dates": [
+      "2026-08-06"
+    ],
+    "non_toxic": 124,
+    "toxic": 26,
+    "toxic_prevalence": 0.17333333333333334
+  },
+  "models": {
+    "svm": {
+      "threshold": 0.5,
+      "accuracy": 0.8133333333333334,
+      "balanced_accuracy": 0.5679280397022333,
+      "precision": 0.4166666666666667,
+      "recall": 0.19230769230769232,
+      "f1": 0.2631578947368421,
+      "confusion_matrix": [
+        [
+          117,
+          7
+        ],
+        [
+          21,
+          5
+        ]
+      ],
+      "true_negatives": 117,
+      "false_positives": 7,
+      "false_negatives": 21,
+      "true_positives": 5,
+      "predicted_toxic": 12
+    },
+    "lstm": {
+      "threshold": 0.9,
+      "accuracy": 0.8533333333333334,
+      "balanced_accuracy": 0.6529156327543424,
+      "precision": 0.6428571428571429,
+      "recall": 0.34615384615384615,
+      "f1": 0.45,
+      "confusion_matrix": [
+        [
+          119,
+          5
+        ],
+        [
+          17,
+          9
+        ]
+      ],
+      "true_negatives": 119,
+      "false_positives": 5,
+      "false_negatives": 17,
+      "true_positives": 9,
+      "predicted_toxic": 14
+    },
+    "hybrid": {
+      "threshold": 0.6,
+      "accuracy": 0.84,
+      "balanced_accuracy": 0.5688585607940446,
+      "precision": 0.6666666666666666,
+      "recall": 0.15384615384615385,
+      "f1": 0.25,
+      "confusion_matrix": [
+        [
+          122,
+          2
+        ],
+        [
+          22,
+          4
+        ]
+      ],
+      "true_negatives": 122,
+      "false_positives": 2,
+      "false_negatives": 22,
+      "true_positives": 4,
+      "predicted_toxic": 6
+    }
+  },
+  "comparisons": {
+    "all_non_toxic_accuracy": 0.8266666666666667,
+    "hybrid_accuracy_minus_all_non_toxic": 0.013333333333333308,
+    "svm_f1_minus_hybrid_f1": 0.01315789473684209,
+    "hybrid_fresh_minus_development": {}
+  }
+}
