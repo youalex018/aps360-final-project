@@ -22,7 +22,7 @@ from sklearn.metrics import (
 )
 
 import config
-from dataset import get_dataloaders, load_splits
+from dataset import Vocab, get_dataloaders, load_splits
 from model import ToxicChatLSTM
 
 
@@ -426,15 +426,15 @@ def collect_split_probabilities(
     if device_name is None:
         device_name = "cuda" if torch.cuda.is_available() else "cpu"
     device = torch.device(device_name)
+    frozen_vocab = Vocab(preview["vocab_stoi"])
     train_dl, val_dl, test_dl, vocab = get_dataloaders(
         batch_size=spec.batch_size,
         seed=spec.seed,
         include_test=split == "test",
         context_k=spec.context_k,
         max_len=spec.max_len,
+        vocab=frozen_vocab,
     )
-    if vocab.stoi != preview["vocab_stoi"]:
-        raise ValueError("Current training vocabulary differs from the checkpoint.")
     model = build_model(spec, len(vocab)).to(device)
     model.load_state_dict(preview["model_state"])
     criterion, _ = _criterion(
@@ -461,15 +461,15 @@ def evaluate_checkpoint(
     if device_name is None:
         device_name = "cuda" if torch.cuda.is_available() else "cpu"
     device = torch.device(device_name)
+    frozen_vocab = Vocab(preview["vocab_stoi"])
     train_dl, _, test_dl, vocab = get_dataloaders(
         batch_size=spec.batch_size,
         seed=spec.seed,
         include_test=True,
         context_k=spec.context_k,
         max_len=spec.max_len,
+        vocab=frozen_vocab,
     )
-    if vocab.stoi != preview["vocab_stoi"]:
-        raise ValueError("Current training vocabulary differs from the checkpoint.")
     model = build_model(spec, len(vocab)).to(device)
     checkpoint = torch.load(
         checkpoint_path,

@@ -8,7 +8,6 @@ import argparse
 import csv
 import json
 
-from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import (
     accuracy_score,
     balanced_accuracy_score,
@@ -19,7 +18,8 @@ from sklearn.metrics import (
 from sklearn.svm import LinearSVC
 
 import config
-from dataset import clean_text, load_splits
+from dataset import load_splits
+from hybrid import build_lexical_vectorizer
 
 
 def _metric_summary(labels, predictions) -> dict:
@@ -44,9 +44,8 @@ def _metric_summary(labels, predictions) -> dict:
 def run_baseline(*, evaluate_test: bool = False) -> dict:
     train_df, val_df, test_df = load_splits()
 
-    # Pass our tokenizer directly so slang expansion and ASCII stripping are
-    # identical to the deep model's input.
-    vectorizer = TfidfVectorizer(tokenizer=clean_text, token_pattern=None)
+    # Word + char_wb TF-IDF with the same cleaning as the deep model.
+    vectorizer = build_lexical_vectorizer()
     x_train = vectorizer.fit_transform(train_df["text"])
     x_val = vectorizer.transform(val_df["text"])
 
@@ -57,9 +56,10 @@ def run_baseline(*, evaluate_test: bool = False) -> dict:
     metrics = {
         "schema_version": 2,
         "dataset": str(config.DATA_PATH.relative_to(config.ROOT)),
-        "model": "TF-IDF + LinearSVC",
+        "model": "TF-IDF (word + char_wb 3-5) + LinearSVC",
         "class_weight": "balanced",
-        "vocabulary_size": int(len(vectorizer.vocabulary_)),
+        "feature_union": "word_tfidf+char_wb_3_5",
+        "vocabulary_size": int(x_train.shape[1]),
         "validation": _metric_summary(val_df["label"], val_predictions),
         "test_accessed": bool(evaluate_test),
     }

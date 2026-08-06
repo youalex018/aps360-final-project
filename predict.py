@@ -26,9 +26,18 @@ from hybrid import fit_lexical_scorer, fuse, svm_probabilities
 from train import build_model, experiment_config_from_dict
 
 FROZEN_HYBRID_CONFIG = config.ARTIFACTS_DIR / "frozen_context_hybrid_config.json"
+FROZEN_IMPROVED_HYBRID_CONFIG = (
+    config.ARTIFACTS_DIR / "frozen_improved_hybrid_config.json"
+)
 DEFAULT_HYBRID_JSON = config.EXPERIMENTS_DIR / "weight7_hybrid_late_seed42.json"
 DEFAULT_FINAL_TEST_CSV = config.ROOT / "data" / "final_test" / "final_chat.csv"
 DEFAULT_FINAL_TEST_OUTPUT = config.FINAL_TEST_ARTIFACTS_DIR / "final_hybrid_predictions.csv"
+DEFAULT_BATCH_B_CSV = (
+    config.ROOT / "data" / "final_test" / "batch_b" / "final_chat.csv"
+)
+DEFAULT_BATCH_B_OUTPUT = (
+    config.FINAL_TEST_ARTIFACTS_DIR / "batch_b" / "final_hybrid_predictions.csv"
+)
 FALLBACK_CHECKPOINT = config.EXPERIMENTS_DIR / "weight_7_seed42.pt"
 
 
@@ -388,8 +397,25 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--frozen-config",
         type=Path,
-        default=FROZEN_HYBRID_CONFIG,
+        default=None,
         help="Frozen hybrid selection JSON used to pick the primary checkpoint",
+    )
+    parser.add_argument(
+        "--use-improved",
+        action="store_true",
+        help=(
+            f"Prefer {FROZEN_IMPROVED_HYBRID_CONFIG.name} when present "
+            "(used automatically with --batch-b)"
+        ),
+    )
+    parser.add_argument(
+        "--batch-b",
+        action="store_true",
+        help=(
+            "Score Batch B CSV "
+            f"({DEFAULT_BATCH_B_CSV}) into {DEFAULT_BATCH_B_OUTPUT} "
+            "using the improved freeze when available"
+        ),
     )
     parser.add_argument(
         "--device",
@@ -433,11 +459,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.batch_b:
+        args.csv = args.csv or DEFAULT_BATCH_B_CSV
+        args.output = args.output or DEFAULT_BATCH_B_OUTPUT
+        args.use_improved = True
+    frozen_config = args.frozen_config
+    if frozen_config is None:
+        if args.use_improved and FROZEN_IMPROVED_HYBRID_CONFIG.is_file():
+            frozen_config = FROZEN_IMPROVED_HYBRID_CONFIG
+        else:
+            frozen_config = FROZEN_HYBRID_CONFIG
     try:
         predictor = load_predictor(
             checkpoint_path=args.checkpoint,
             hybrid_json=args.hybrid_json,
-            frozen_config=args.frozen_config,
+            frozen_config=frozen_config,
             device_name=args.device,
         )
     except (FileNotFoundError, KeyError, ValueError) as exc:
