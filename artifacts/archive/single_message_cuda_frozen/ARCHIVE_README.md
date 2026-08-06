@@ -16,8 +16,10 @@
 
 ## Not duplicated here
 
-- `artifacts/old_results/` — first-iteration Tribunal role-proxy run (unchanged)
-- `artifacts/first_iteration_metrics.json` — static first-iteration summary (unchanged)
+- `artifacts/archive/tribunal_first_iteration/` — Tribunal role-proxy first iteration
+  (formerly `artifacts/old_results/` + `first_iteration_metrics.json`)
+- Later hybrid freeze records and context screens live in the live `artifacts/`
+  tree / `artifacts/archive/nonselected_screens/` after the 2026-08-04 cleanup.
 
 ## After uploading new `artifacts/` from Colab
 

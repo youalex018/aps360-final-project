@@ -1,0 +1,9 @@
+artifacts/ layout (canonical)
+=============================
+Root JSON/CSV: frozen configs, baseline/LSTM/hybrid development metrics, data audit, qualitative examples.
+experiments/: frozen primary only — weight_7_seed{42,43,44} + weight7_hybrid_late_seed{42,43,44}.
+final_test/: one-shot evaluation outputs on the fresh OCR set (write here; do not retune).
+archive/single_message_cuda_frozen/: pre-hybrid CUDA freeze snapshot.
+archive/nonselected_screens/: LSTM/context screens that were not the headline model.
+archive/tribunal_first_iteration/: role-proxy first iteration + former old_results/.
+archive/stale_final_test_predictions/: pre-label / incomplete prediction CSVs removed before locked eval.

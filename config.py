@@ -15,8 +15,12 @@ ARTIFACTS_DIR = ROOT / "artifacts"
 # Backward-compatible alias. All generated evidence now has one authority.
 RESULTS_DIR = ARTIFACTS_DIR
 EXPERIMENTS_DIR = ARTIFACTS_DIR / "experiments"
-FIRST_ITERATION_METRICS_PATH = ARTIFACTS_DIR / "first_iteration_metrics.json"
-OLD_RESULTS_DIR = ARTIFACTS_DIR / "old_results"
+FINAL_TEST_ARTIFACTS_DIR = ARTIFACTS_DIR / "final_test"
+ARCHIVE_DIR = ARTIFACTS_DIR / "archive"
+FIRST_ITERATION_METRICS_PATH = (
+    ARCHIVE_DIR / "tribunal_first_iteration" / "first_iteration_metrics.json"
+)
+OLD_RESULTS_DIR = ARCHIVE_DIR / "tribunal_first_iteration"
 CKPT_PATH = ARTIFACTS_DIR / "best_model.pt"
 REPORT_FIGURES_DIR = ROOT / "reports" / "progress"
 SUBSAMPLE_SIZE = 100_000

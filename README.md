@@ -75,7 +75,7 @@ and the prepared L2DTnH train split for the lexical arm.
 python predict.py
 python predict.py --once "gg ez mid diff" --show-tokens
 python predict.py --csv                       # data/final_test/final_chat.csv
-python predict.py --csv data/final_test/final_chat.csv --output artifacts/final_test_predictions.csv
+python predict.py --csv data/final_test/final_chat.csv --output artifacts/final_test/final_hybrid_predictions.csv
 ```
 
 `run_context_hybrid_experiments.py` screens same-match context windows (`K∈{1,2,3}`),
@@ -86,12 +86,13 @@ then opens the grouped test once. Artifacts land under `artifacts/` as
 `context_hybrid_experiment_summary.json`.
 
 `run_lstm_experiments.py` retains the earlier single-message screen (frozen
-`weight_7`, which did not beat the SVM). Small result files and selected
-checkpoints are written to the canonical `artifacts/` directory; generated
-figures are written to `reports/progress/figures/`. Archived evidence lives under
-`artifacts/old_results/` (the former `results/` tree from the pre-validation-F1
-pipeline) and `artifacts/first_iteration_metrics.json` (the Tribunal role-proxy
-first iteration). The untouched fresh-data procedure is in
+`weight_7`, which did not beat the SVM). Live evidence stays under
+`artifacts/` (freeze records, development metrics, `best_model.pt`) with only
+the frozen primary checkpoints in `artifacts/experiments/`
+(`weight_7_seed{42,43,44}` and `weight7_hybrid_late_seed{42,43,44}`). Write
+fresh-test one-shot outputs to `artifacts/final_test/`. Historical screens and
+Tribunal-era files live under `artifacts/archive/` (see `artifacts/LAYOUT.txt`).
+Generated figures go to `reports/progress/`. The fresh-data procedure is in
 `FINAL_TEST_PROTOCOL.md`.
 
 For GPU training, open `colab_train.ipynb` in Google Colab, enable a GPU runtime,
@@ -99,11 +100,7 @@ mount Drive, and run the notebook cells.
 
 ## Fresh chat collection
 
-Riot's public and local APIs do not expose in-game team/all chat text.
-`collect_chat.py` therefore passively captures only the calibrated part of the
-League window and runs local OCR. It does not inject input, inspect game memory,
-or label messages. Use it only for your own matches or voluntarily supplied
-logs under `FINAL_TEST_PROTOCOL.md`.
+Riot's public and local APIs do not expose in-game team/all chat text. I wanted some way of collecting data that could be automated. `collect_chat.py` therefore passively captures only the calibrated part of the League window and runs local Optical Character Recognition (OCR). It does not inject input, inspect game memory, or label messages. Use it only for your own matches or voluntarily supplied logs under `FINAL_TEST_PROTOCOL.md`.
 
 Use borderless or windowed mode. Finish loading into a Practice Tool or custom
 game (lobby/champion-select chat is rejected), open the in-game chat, then
@@ -149,6 +146,17 @@ IDs, and links, then rebuilds:
 Delete raw screenshots when prompted after confirming the sanitized export.
 Do not use apparent toxicity when deciding which messages to retain.
 
+After the anonymized CSV is ready, label messages interactively:
+
+```bash
+python label_final_test.py
+python label_final_test.py --start 50      # resume near a CSV row
+python label_final_test.py --relabel       # revisit already-labeled rows
+```
+
+Type `0` (non-toxic) or `1` (toxic) for each line; `s` skips, `b` undoes the
+previous label, `n` adds a note, `q` quits. Each change is saved immediately.
+
 ## Layout
 
 | File | Purpose |
@@ -159,6 +167,7 @@ Do not use apparent toxicity when deciding which messages to retain.
 | `train.py` | Validation-F1 checkpointing, threshold selection, and frozen test evaluation. |
 | `hybrid.py` | Train-only TF-IDF LinearSVC late fusion with validation-tuned blend. |
 | `predict.py` | Interactive / one-shot terminal scorer for the frozen hybrid model. |
+| `label_final_test.py` | Terminal `0`/`1` labeler for `data/final_test/final_chat.csv`. |
 | `baseline.py` | scikit-learn TF-IDF + SVM baseline. |
 | `run_lstm_experiments.py` | Legacy single-message validation screen and frozen evaluation. |
 | `run_context_hybrid_experiments.py` | Context-window + hybrid screen, three-seed freeze, test once. |

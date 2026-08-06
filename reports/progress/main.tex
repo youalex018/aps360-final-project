@@ -1,0 +1,186 @@
+\begin{filecontents*}{references.bib}
+@misc{kaggle_tribunal,
+  author = {Shengxue, S.},
+  title = {League of Legends Tribunal Chatlogs},
+  year = {2020},
+  howpublished = {\url{https://www.kaggle.com/datasets/simshengxue/league-of-legends-tribunal-chatlogs}},
+  note = {Kaggle}
+}
+
+@inproceedings{ave2026,
+  author = {Ave, Jonas and Pekaric, Irdin and Frohner, Matthias and Apruzzese, Giovanni},
+  title = {{``bot lane noob'': Towards Practical Deployment of NLP-based Toxicity Detectors in Video Games}},
+  booktitle = {European Symposium on Research in Computer Security (ESORICS)},
+  year = {2026}
+}
+
+@article{hochreiter1997,
+  author = {Hochreiter, Sepp and Schmidhuber, J\"{u}rgen},
+  title = {Long Short-Term Memory},
+  journal = {Neural Computation},
+  volume = {9},
+  number = {8},
+  pages = {1735--1780},
+  year = {1997}
+}
+\end{filecontents*}
+
+\documentclass[final]{article}
+
+% aps360 loads natbib; force numerical cites to match IEEEtran.bst.
+% [main] defines \@trackname required by the [final] footer notice.
+\PassOptionsToPackage{numbers,sort&compress}{natbib}
+\usepackage[main]{aps360}
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{xcolor}         % colors
+\usepackage{graphicx}       % figures
+\usepackage{caption}        % consistent caption spacing / alignment
+\captionsetup{
+  justification=centering,
+  singlelinecheck=false,
+  skip=6pt,
+  position=bottom
+}
+\setlength{\abovecaptionskip}{6pt}
+\setlength{\belowcaptionskip}{6pt}
+\setlength{\intextsep}{8pt plus 2pt minus 2pt}
+\setlength{\textfloatsep}{8pt plus 2pt minus 2pt}
+\setlength{\floatsep}{8pt plus 2pt minus 2pt}
+\input{generated_metrics.tex}
+
+\title{LoL Toxic Gaming Chat Classifier: Progress Report}
+
+\author{%
+  Alex You \\
+  1011175185, alex.you@mail.utoronto.ca\\
+  \href{https://drive.google.com/file/d/1ZpCdToVI99i70RV82QCT0uEILGDSMMd4/view?usp=sharing}{Link to Google Colab}\\
+}
+
+\begin{document}
+
+\maketitle
+
+\vspace{-0.5in}
+
+\section*{Brief Project Description}
+
+Online gaming communities are widely known for toxic chat. League of Legends (LoL) is a clear example: matches move quickly, messages are short, and players lean on slang that general moderation tools often miss, such as ``inting'' (intentionally feeding) or ``bot diff'' (blaming the bottom lane). This project takes one raw LoL chat message as input and predicts whether it is toxic or non-toxic. Deep learning is a reasonable fit because word order and tone can flip meaning---for example, a sincere ``nice'' versus a sarcastic ``nice play''---in ways that fixed keyword lists handle poorly. I compare a TF--IDF + linear SVM bag-of-words baseline, an LSTM sequence model \cite{hochreiter1997}, and a late-fusion hybrid that blends the two. The hybrid is my primary model because many messages are only one or two tokens long, so the SVM's lexical cues remain useful alongside the neural net.
+
+\section*{Notable Contribution: Data Processing}
+
+My first attempt used 100k rows from the public Tribunal chat logs \cite{kaggle_tribunal} and treated speaker role as the label: every message from a reported player was marked toxic, while messages from teammates or enemies were marked safe. That proxy fails at the message level. After cleaning, 38,912 identical texts appeared with both labels---for instance, a harmless ``lol'' from a reported player still counted as toxic---and the first SVM and LSTM only reached 55.2\% and 54.5\% test accuracy.
+
+I therefore switched to L2DTnH, which stays in the same chat domain but provides message-level labels from eight experienced LoL players \cite{ave2026}. Figure~\ref{fig:data} summarizes the cleaning pipeline: decode HTML, normalize Unicode, lowercase, collapse spaces, keep alphanumeric tokens, and expand 15 common slang shortcuts (e.g., \texttt{ff} $\rightarrow$ ``forfeit''). Incomplete rows, empty messages, and texts with conflicting expert labels are removed; repeated same-label lines are kept because spam itself can be toxic.
+
+\begin{figure}[!h]
+  \centering
+  \includegraphics[width=0.95\textwidth]{data_pipeline.png}
+  \caption{Expert-labelled preprocessing with counts after each quality control step.}
+  \label{fig:data}
+\end{figure}
+
+\begin{table}[!h]
+\centering
+\small
+\setlength{\tabcolsep}{5pt}
+\begin{minipage}[t]{0.58\linewidth}
+  \centering
+  \begin{tabular}{lrrrr}
+  \toprule
+  Partition & Messages & Non-toxic & Toxic & Chat logs \\
+  \midrule
+  Train & 10,050 & 9,123 & 927 & 70 \\
+  Validation & 2,109 & 1,911 & 198 & 15 \\
+  Test & 2,134 & 1,939 & 195 & 16 \\
+  \bottomrule
+  \end{tabular}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.38\linewidth}
+  \centering
+  \begin{tabular}{ll}
+  \toprule
+  Raw message & Cleaned tokens \\
+  \midrule
+  \texttt{its gg} & \texttt{its good game} \\
+  \texttt{gold --- elo} & \texttt{gold elo} \\
+  \texttt{gj} & \texttt{good job} \\
+  \bottomrule
+  \end{tabular}
+\end{minipage}
+\caption{Grouped split and cleaned samples. 14,293 messages kept (1,320 toxic); median length is two tokens.}
+\label{tab:data}
+\end{table}
+
+Instead of shuffling individual rows, I assign each full match (\texttt{chatlog\_id}) to train, validation, or test in roughly a 70/15/15 split. This keeps the model from seeing the same game across partitions, while the toxic rate stays near 9\%. For final testing, I will collect 200--300 anonymized messages from at least 20 new live matches, label them with a written rubric, obtain a second label on at least 50 messages, and reveal those labels only after preprocessing and model choices are frozen.
+
+\section*{Notable Contribution: Baseline Model}
+
+The baseline is a classic text classifier. TF--IDF turns each message into word-importance scores, and a linear SVM (LinearSVC) separates toxic from non-toxic examples, with class weights to balance the rare toxic class. The model is fast and lightly tuned, which makes it a fair check on whether word counts alone are enough before investing in deep learning. Its validation toxic-class F1---the harmonic mean of precision and recall on the toxic class---was \BaselineValidationFOne, and I left that baseline unchanged afterward. Because only about 9\% of messages are toxic, overall accuracy can look strong while still missing many toxic cases, so Table~\ref{tab:results} emphasizes toxic F1 and balanced accuracy. Figure~\ref{fig:models} compares this baseline with the primary hybrid under the same labels, cleaning, and grouped splits.
+
+\begin{figure}[!h]
+  \centering
+  \includegraphics[width=0.95\textwidth]{architecture_comparison.png}
+  \caption{Same labels, cleaning, and match-grouped splits. The primary model blends LSTM and SVM scores.}
+  \label{fig:models}
+\end{figure}
+
+\begin{table}[!h]
+\centering
+\small
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{lrrrrr}
+\toprule
+Model & Accuracy & Balanced acc. & Precision & Recall & Toxic F1 \\
+\midrule
+TF--IDF + LinearSVC & \BaselineAccuracy & \textbf{\BaselineBalancedAccuracy} & \BaselinePrecision & \textbf{\BaselineRecall} & \BaselineFOne \\
+Single-message LSTM & \LSTMAccuracy & \LSTMBalancedAccuracy & \LSTMPrecision & \LSTMRecall & \LSTMFOne$\pm$\LSTMFOneStd \\
+Late fusion hybrid & \textbf{\HybridAccuracy} & \HybridBalancedAccuracy & \textbf{\HybridPrecision} & \HybridRecall & \textbf{\HybridFOne$\pm$\HybridFOneStd} \\
+\bottomrule
+\end{tabular}
+\caption{Grouped test (2,134 messages / 16 matches). Hybrid $=$ primary model; LSTM $=$ failed neural-only try.}
+\label{tab:results}
+\end{table}
+
+On the grouped test set, the SVM caught \BaselineTruePositives{} of the 195 toxic messages and produced \BaselineFalsePositives{} false alarms. The hybrid (seed 42) raised true positives to \HybridTruePositives{} and cut false positives to \HybridFalsePositives, gaining \HybridMinusBaselineFOne{} toxic F1 while trading some recall for precision. Qualitatively, both models usually leave harmless slang such as forfeit timers alone; the hybrid's behaviour is discussed further in the next section.
+
+\section*{Notable Contribution: Primary Model}
+
+My best model so far is a late-fusion hybrid: the LSTM and the SVM each score the same message, and those scores are mixed before the final toxic / non-toxic decision (Figure~\ref{fig:models}). ``Late'' fusion means the two models run independently and only their outputs are combined. This design helps when chat is so short that a pure LSTM struggles to beat simple word counts.
+
+\begin{itemize}
+  \setlength{\itemsep}{0.15em}
+  \setlength{\parsep}{0pt}
+  \item \textbf{Input:} one cleaned message (same pipeline as above)
+  \item \textbf{Embedding:} each token maps to a learned 100-D vector; vocab size \HybridVocabSize{} (built from train only)
+  \item \textbf{LSTM:} 2 layers, hidden size 128, dropout \HybridDropout; uses the last time step; \HybridParameters{} parameters
+  \item \textbf{Training:} Adam (lr $10^{-3}$), batch 64, toxic class weight 7, early stop on validation toxic F1 (patience 3)
+  \item \textbf{SVM branch:} same TF--IDF + LinearSVC as the baseline (fit on train only)
+  \item \textbf{Fusion:} $\alpha\,p_{\mathrm{LSTM}}+(1-\alpha)\sigma(\mathrm{margin}_{\mathrm{SVM}})$, where $p_{\mathrm{LSTM}}$ is the LSTM toxic probability, $\sigma$ maps the SVM margin into $[0,1]$, and $\alpha$ controls how much weight the LSTM receives. Both $\alpha$ and the decision threshold are chosen on validation only.
+\end{itemize}
+
+Beyond this recipe, I also tried stronger regularization, a smaller LSTM, a bidirectional LSTM, and context windows that add the previous $K=1,2,3$ messages from the same match. Validation preferred the single-message hybrid above (val F1 \HybridValidationFOne$\pm$\HybridValidationFOneStd). The LSTM alone stayed below the SVM on test (F1 \LSTMFOne$\pm$\LSTMFOneStd), and context alone peaked at validation F1 \ContextBestValidationFOne.
+
+\begin{figure}[!h]
+  \centering
+  \includegraphics[width=0.92\textwidth]{learning_curves.png}
+  \caption{LSTM training (seed 42): best epoch \HybridBestEpoch{} by validation F1; train/val loss gap shows overfitting.}
+  \label{fig:curves}
+\end{figure}
+
+On the held-out matches, the hybrid reaches toxic F1 \HybridFOne$\pm$\HybridFOneStd across three seeds (seed 42: \HybridSeedFortyTwoFOne), above the SVM's \BaselineFOne{} (Table~\ref{tab:results}). The learned blend weights were $\alpha\in\{\HybridAlphas\}$; one seed even chose $\alpha=0$, meaning validation preferred the pure SVM for that run. Looking at individual messages, ``12~min to ff?'' is correctly treated as non-toxic, and fusion can recover cases such as ``WORST TEAM EY'' when the SVM misses. The hybrid still over-flags angry but non-toxic lines like ``fuck this shit troll games,'' and it can miss short insults such as ``u fuked us.'' The core difficulty is length: with a median of only two tokens, the LSTM overfits quickly (Figure~\ref{fig:curves}) unless it is fused with the SVM. I am not retuning on the grouped test; a new live OCR-labelled set remains reserved for final evaluation.
+
+{\small\noindent\textit{AI use:} Cursor agents assisted with code, figures, and editing. Metrics come from repository scripts checked against saved result files.}
+
+\clearpage
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

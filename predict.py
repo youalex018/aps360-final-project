@@ -7,7 +7,7 @@ interactively, with ``--once``, or batch-score ``data/final_test/final_chat.csv`
 
 python predict.py --once "gg ez mid diff" --show-tokens
 python predict.py --csv
-python predict.py --csv data/final_test/final_chat.csv --output artifacts/final_test_predictions.csv
+python predict.py --csv data/final_test/final_chat.csv --output artifacts/final_test/final_hybrid_predictions.csv
 """
 from __future__ import annotations
 
@@ -28,6 +28,7 @@ from train import build_model, experiment_config_from_dict
 FROZEN_HYBRID_CONFIG = config.ARTIFACTS_DIR / "frozen_context_hybrid_config.json"
 DEFAULT_HYBRID_JSON = config.EXPERIMENTS_DIR / "weight7_hybrid_late_seed42.json"
 DEFAULT_FINAL_TEST_CSV = config.ROOT / "data" / "final_test" / "final_chat.csv"
+DEFAULT_FINAL_TEST_OUTPUT = config.FINAL_TEST_ARTIFACTS_DIR / "final_hybrid_predictions.csv"
 FALLBACK_CHECKPOINT = config.EXPERIMENTS_DIR / "weight_7_seed42.pt"
 
 
@@ -296,7 +297,10 @@ def score_csv(
     """Score every non-empty final-test message and write a predictions CSV."""
     rows = load_final_test_messages(csv_path)
     if output_path is None:
-        output_path = csv_path.with_name(f"{csv_path.stem}_predictions.csv")
+        if csv_path.resolve() == DEFAULT_FINAL_TEST_CSV.resolve():
+            output_path = DEFAULT_FINAL_TEST_OUTPUT
+        else:
+            output_path = csv_path.with_name(f"{csv_path.stem}_predictions.csv")
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     fieldnames = [
@@ -414,7 +418,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--output",
         type=Path,
         default=None,
-        help="Predictions CSV path (default: <csv_stem>_predictions.csv beside the input)",
+        help=(
+            "Predictions CSV path (default: artifacts/final_test/final_hybrid_predictions.csv "
+            "for the canonical final-test CSV, else <csv_stem>_predictions.csv beside the input)"
+        ),
     )
     parser.add_argument(
         "--show-tokens",

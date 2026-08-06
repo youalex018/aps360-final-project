@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-05T04:40:18.858520+00:00",
+  "source_predictions": "artifacts\\final_test\\final_hybrid_predictions.csv",
+  "protocol": {
+    "labels_locked": true,
+    "inference_run": "weight7_hybrid_late_seed42",
+    "checkpoint": "artifacts/experiments/weight_7_seed42.pt",
+    "hybrid_alpha": 0.3,
+    "thresholds_selected_on": "L2DTnH validation split",
+    "test_threshold_search": false
+  },
+  "dataset": {
+    "messages": 332,
+    "matches": 14,
+    "match_dates": [
+      "2026-08-01",
+      "2026-08-02",
+      "2026-08-04"
+    ],
+    "non_toxic": 283,
+    "toxic": 49,
+    "toxic_prevalence": 0.14759036144578314
+  },
+  "models": {
+    "svm": {
+      "threshold": 0.5,
+      "accuracy": 0.8373493975903614,
+      "balanced_accuracy": 0.6599120213456408,
+      "precision": 0.4444444444444444,
+      "recall": 0.40816326530612246,
+      "f1": 0.425531914893617,
+      "confusion_matrix": [
+        [
+          258,
+          25
+        ],
+        [
+          29,
+          20
+        ]
+      ],
+      "true_negatives": 258,
+      "false_positives": 25,
+      "false_negatives": 29,
+      "true_positives": 20,
+      "predicted_toxic": 45
+    },
+    "lstm": {
+      "threshold": 0.9,
+      "accuracy": 0.8343373493975904,
+      "balanced_accuracy": 0.5822095622701378,
+      "precision": 0.39285714285714285,
+      "recall": 0.22448979591836735,
+      "f1": 0.2857142857142857,
+      "confusion_matrix": [
+        [
+          266,
+          17
+        ],
+        [
+          38,
+          11
+        ]
+      ],
+      "true_negatives": 266,
+      "false_positives": 17,
+      "false_negatives": 38,
+      "true_positives": 11,
+      "predicted_toxic": 28
+    },
+    "hybrid": {
+      "threshold": 0.6,
+      "accuracy": 0.8554216867469879,
+      "balanced_accuracy": 0.6198889449772842,
+      "precision": 0.5185185185185185,
+      "recall": 0.2857142857142857,
+      "f1": 0.3684210526315789,
+      "confusion_matrix": [
+        [
+          270,
+          13
+        ],
+        [
+          35,
+          14
+        ]
+      ],
+      "true_negatives": 270,
+      "false_positives": 13,
+      "false_negatives": 35,
+      "true_positives": 14,
+      "predicted_toxic": 27
+    }
+  },
+  "comparisons": {
+    "all_non_toxic_accuracy": 0.8524096385542169,
+    "hybrid_accuracy_minus_all_non_toxic": 0.0030120481927710108,
+    "svm_f1_minus_hybrid_f1": 0.0571108622620381,
+    "hybrid_fresh_minus_development": {
+      "accuracy": -0.08600286807962876,
+      "balanced_accuracy": -0.2048912086837359,
+      "precision": -0.1600529100529101,
+      "recall": -0.39633699633699637,
+      "f1": -0.3118858527392651
+    }
+  }
+}
