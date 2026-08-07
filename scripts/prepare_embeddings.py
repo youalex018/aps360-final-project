@@ -9,8 +9,8 @@ import urllib.request
 import numpy as np
 import torch
 
-import config
-from dataset import Vocab, clean_text, load_splits
+from toxic_chat import config
+from toxic_chat.dataset import Vocab, clean_text, load_splits
 
 GLOVE_URL = (
     "https://github.com/RaRe-Technologies/gensim-data/releases/download/"

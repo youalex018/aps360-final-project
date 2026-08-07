@@ -6,9 +6,9 @@ import csv
 import pandas as pd
 import pytest
 
-import dataset
-from dataset import get_dataloaders, load_splits
-from train import (
+import toxic_chat.dataset as dataset
+from toxic_chat.dataset import get_dataloaders, load_splits
+from toxic_chat.train import (
     checkpoint_is_better,
     metric_summary,
     save_predictions,

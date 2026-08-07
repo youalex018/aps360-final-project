@@ -21,9 +21,9 @@ from sklearn.metrics import (
     precision_recall_fscore_support,
 )
 
-import config
-from dataset import Vocab, get_dataloaders, load_splits
-from model import ToxicChatLSTM
+from toxic_chat import config
+from toxic_chat.dataset import Vocab, get_dataloaders, load_splits
+from toxic_chat.model import ToxicChatLSTM
 
 
 @dataclass(frozen=True)

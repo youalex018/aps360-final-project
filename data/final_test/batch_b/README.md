@@ -9,8 +9,8 @@ freeze). Then:
 
 ```powershell
 .venv\Scripts\Activate.ps1
-python predict.py --batch-b
-python evaluate_final_test.py --batch-b
+python scripts/predict.py --batch-b
+python scripts/evaluate_final_test.py --batch-b
 ```
 
 Predictions and metrics land under `artifacts/final_test/batch_b/`.

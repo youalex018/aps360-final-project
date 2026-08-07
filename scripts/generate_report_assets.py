@@ -13,7 +13,7 @@ from matplotlib.patches import FancyBboxPatch
 import numpy as np
 import pandas as pd
 
-import config
+from toxic_chat import config
 
 ARCHIVE_DIR = config.ARTIFACTS_DIR / "archive" / "single_message_cuda_frozen"
 

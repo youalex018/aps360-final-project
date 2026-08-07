@@ -1,7 +1,7 @@
 """Prepare a balanced Tribunal chat dataset for LSTM/TF-IDF training."""
 import pandas as pd
 
-import config
+from toxic_chat import config
 
 
 SOURCE_TEXT_COL = "message"

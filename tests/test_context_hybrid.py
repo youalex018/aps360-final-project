@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import dataset
-from dataset import (
+import toxic_chat.dataset as dataset
+from toxic_chat.dataset import (
     CTX_TOKEN,
     MSG_TOKEN,
     TGT_TOKEN,
@@ -16,13 +16,13 @@ from dataset import (
     build_context_tokens,
     get_dataloaders,
 )
-from hybrid import (
+from toxic_chat.hybrid import (
     fit_lexical_scorer,
     fuse,
     select_fusion_on_validation,
     svm_probabilities,
 )
-from train import save_predictions
+from toxic_chat.train import save_predictions
 
 
 def _context_csv(tmp_path):

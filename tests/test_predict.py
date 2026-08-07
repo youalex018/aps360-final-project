@@ -8,9 +8,9 @@ import pytest
 import torch
 import torch.nn as nn
 
-import config
-from dataset import Vocab, PAD_TOKEN, UNK_TOKEN
-from hybrid import fit_lexical_scorer
+from toxic_chat import config
+from toxic_chat.dataset import Vocab, PAD_TOKEN, UNK_TOKEN
+from toxic_chat.hybrid import fit_lexical_scorer
 from predict import (
     DEFAULT_HYBRID_JSON,
     FROZEN_HYBRID_CONFIG,

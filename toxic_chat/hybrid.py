@@ -15,9 +15,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.pipeline import FeatureUnion
 from sklearn.svm import LinearSVC
 
-import config
-from dataset import add_context_column, clean_text, load_splits
-from train import (
+from toxic_chat import config
+from toxic_chat.dataset import add_context_column, clean_text, load_splits
+from toxic_chat.train import (
     collect_split_probabilities,
     experiment_config_from_dict,
     metric_summary,

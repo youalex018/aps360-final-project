@@ -32,7 +32,7 @@ from sklearn.metrics import (
     recall_score,
 )
 
-import config
+from toxic_chat import config
 
 DEFAULT_PREDICTIONS = (
     config.FINAL_TEST_ARTIFACTS_DIR / "final_hybrid_predictions.csv"

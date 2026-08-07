@@ -17,9 +17,9 @@ from sklearn.metrics import (
 )
 from sklearn.svm import LinearSVC
 
-import config
-from dataset import load_splits
-from hybrid import build_lexical_vectorizer
+from toxic_chat import config
+from toxic_chat.dataset import load_splits
+from toxic_chat.hybrid import build_lexical_vectorizer
 
 
 def _metric_summary(labels, predictions) -> dict:

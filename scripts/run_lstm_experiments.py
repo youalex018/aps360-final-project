@@ -9,10 +9,10 @@ import shutil
 
 import numpy as np
 
-import config
-from baseline import run_baseline
 from prepare_embeddings import build_embedding_artifact
-from train import (
+from toxic_chat import config
+from toxic_chat.baseline import run_baseline
+from toxic_chat.train import (
     ExperimentConfig,
     evaluate_checkpoint,
     experiment_config_from_dict,

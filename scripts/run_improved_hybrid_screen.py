@@ -17,9 +17,9 @@ from pathlib import Path
 
 import numpy as np
 
-import config
-from hybrid import late_fuse_lstm_run
-from train import ExperimentConfig, run_experiment
+from toxic_chat import config
+from toxic_chat.hybrid import late_fuse_lstm_run
+from toxic_chat.train import ExperimentConfig, run_experiment
 
 BASELINE_VAL_F1 = 0.671
 HYBRID_CONFIG_ID = "weight7_char_f2_hybrid_late"

@@ -5,8 +5,8 @@ Classifies League of Legends chat lines as `toxic` (1) or `safe` (0).
 Two models share the same preprocessing and data splits so their accuracies are
 directly comparable:
 
-- **LSTM** (`model.py` + `train.py`): learned embeddings → packed LSTM → logit.
-- **Baseline** (`baseline.py`): TF-IDF features → Linear SVM.
+- **LSTM** (`toxic_chat/model.py` + `toxic_chat/train.py`): learned embeddings → packed LSTM → logit.
+- **Baseline** (`toxic_chat/baseline.py`): TF-IDF features → Linear SVM.
 
 ## Setup
 
@@ -15,6 +15,7 @@ python -m venv .venv
 .venv\Scripts\activate        # Windows (PowerShell)
 # source .venv/bin/activate   # macOS / Linux
 pip install -r requirements.txt
+pip install -e .
 ```
 
 The optional Windows chat collector also requires the
@@ -31,7 +32,7 @@ Download
 `data/l2dtnh/l2dtnh_english.csv`, then run:
 
 ```bash
-python prepare_l2dtnh.py
+python scripts/prepare_l2dtnh.py
 ```
 
 The script writes `data/l2dtnh/l2dtnh_prepared.csv` with:
@@ -46,62 +47,62 @@ It removes token-empty rows and normalized texts carrying contradictory labels,
 then saves a processing audit to `artifacts/data_audit.json`. Complete chat logs
 never cross splits.
 
-`prepare_tribunal.py` preserves the original 100k offender-role proxy experiment
+`scripts/prepare_tribunal.py` preserves the original 100k offender-role proxy experiment
 for comparison, but those labels identify who spoke rather than whether each
 message is toxic and are no longer used for model development.
 
 ## Run
 
 ```bash
-python prepare_l2dtnh.py  # clean, audit, grouped splits, msg_index order
-python baseline.py        # validation target; does not access test
-python train.py           # one validation-only corrected-current LSTM run
-python run_lstm_experiments.py --screen-only  # legacy single-message screen
-python run_context_hybrid_experiments.py --screen-only  # context K + hybrid on val
+python scripts/prepare_l2dtnh.py  # clean, audit, grouped splits, msg_index order
+python scripts/baseline.py        # validation target; does not access test
+python scripts/train.py           # one validation-only corrected-current LSTM run
+python scripts/run_lstm_experiments.py --screen-only  # legacy single-message screen
+python scripts/run_context_hybrid_experiments.py --screen-only  # context K + hybrid on val
 # Only after the winner is frozen:
-python run_context_hybrid_experiments.py
+python scripts/run_context_hybrid_experiments.py
 # Regenerate progress-report assets only if mean test F1 beats the SVM baseline:
-python generate_report_assets.py
+python scripts/generate_report_assets.py
 ```
 
 ### Interactive demo
 
-Score chat lines with the frozen primary hybrid. By default `predict.py` reads
+Score chat lines with the frozen primary hybrid. By default `scripts/predict.py` reads
 `artifacts/frozen_context_hybrid_config.json` (currently `weight7_hybrid_late`,
 seed 42 → `artifacts/experiments/weight_7_seed42.pt` / `artifacts/best_model.pt`)
 and the prepared L2DTnH train split for the lexical arm.
 
 ```bash
-python predict.py
-python predict.py --once "gg ez mid diff" --show-tokens
-python predict.py --csv                       # data/final_test/final_chat.csv
-python predict.py --csv data/final_test/final_chat.csv --output artifacts/final_test/final_hybrid_predictions.csv
+python scripts/predict.py
+python scripts/predict.py --once "gg ez mid diff" --show-tokens
+python scripts/predict.py --csv                       # data/final_test/final_chat.csv
+python scripts/predict.py --csv data/final_test/final_chat.csv --output artifacts/final_test/final_hybrid_predictions.csv
 ```
 
-`run_context_hybrid_experiments.py` screens same-match context windows (`K∈{1,2,3}`),
+`scripts/run_context_hybrid_experiments.py` screens same-match context windows (`K∈{1,2,3}`),
 late-fuses the best context LSTM (and a `weight_7` control) with train-only TF-IDF
 LinearSVC scores, freezes by mean validation toxic-class F1 across seeds 42–44,
 then opens the grouped test once. Artifacts land under `artifacts/` as
 `frozen_context_hybrid_config.json`, `context_hybrid_metrics.json`, and
 `context_hybrid_experiment_summary.json`.
 
-After Batch~A, `run_improved_hybrid_screen.py` screens character n-gram lexical
+After Batch~A, `scripts/run_improved_hybrid_screen.py` screens character n-gram lexical
 branches (`weight7_char_f1_hybrid_late` / F2 variants) without opening Batch~A
 labels. If mean val F1 beats 0.671 it writes
 `artifacts/frozen_improved_hybrid_config.json` for Batch~B:
 
 ```bash
-python run_improved_hybrid_screen.py --device cpu
+python scripts/run_improved_hybrid_screen.py --device cpu
 # optional: also train MIN_FREQ=2 LSTMs
-python run_improved_hybrid_screen.py --device cpu --train-minfreq2
-python predict.py --batch-b
-python evaluate_final_test.py --batch-b
+python scripts/run_improved_hybrid_screen.py --device cpu --train-minfreq2
+python scripts/predict.py --batch-b
+python scripts/evaluate_final_test.py --batch-b
 ```
 
 Place Batch~B labels at `data/final_test/batch_b/final_chat.csv` only after the
 improved freeze exists.
 
-`run_lstm_experiments.py` retains the earlier single-message screen (frozen
+`scripts/run_lstm_experiments.py` retains the earlier single-message screen (frozen
 `weight_7`, which did not beat the SVM). Live evidence stays under
 `artifacts/` (freeze records, development metrics, `best_model.pt`) with only
 the frozen primary checkpoints in `artifacts/experiments/`
@@ -111,25 +112,25 @@ Tribunal-era files live under `artifacts/archive/` (see `artifacts/LAYOUT.txt`).
 Generated figures go to `reports/progress/`. The fresh-data procedure is in
 `FINAL_TEST_PROTOCOL.md`.
 
-For GPU training, open `colab_train.ipynb` in Google Colab, enable a GPU runtime,
+For GPU training, open `notebooks/colab_train.ipynb` in Google Colab, enable a GPU runtime,
 mount Drive, and run the notebook cells.
 
 ## Fresh chat collection
 
-Riot's public and local APIs do not expose in-game team/all chat text. I wanted some way of collecting data that could be automated. `collect_chat.py` therefore passively captures only the calibrated part of the League window and runs local Optical Character Recognition (OCR). It does not inject input, inspect game memory, or label messages. Use it only for your own matches or voluntarily supplied logs under `FINAL_TEST_PROTOCOL.md`.
+Riot's public and local APIs do not expose in-game team/all chat text. I wanted some way of collecting data that could be automated. `scripts/collect_chat.py` therefore passively captures only the calibrated part of the League window and runs local Optical Character Recognition (OCR). It does not inject input, inspect game memory, or label messages. Use it only for your own matches or voluntarily supplied logs under `FINAL_TEST_PROTOCOL.md`.
 
 Use borderless or windowed mode. Finish loading into a Practice Tool or custom
 game (lobby/champion-select chat is rejected), open the in-game chat, then
 select only the chat rectangle:
 
 ```bash
-python collect_chat.py list-windows  # optional troubleshooting
-python collect_chat.py calibrate
-python collect_chat.py collect
-python collect_chat.py diagnose --session M-YYYYMMDD-xxxxxxxx  # offline replay gate
-python collect_chat.py discard-session --session M-YYYYMMDD-xxxxxxxx  # technical failures only
-python collect_chat.py review
-python collect_chat.py status
+python scripts/collect_chat.py list-windows  # optional troubleshooting
+python scripts/collect_chat.py calibrate
+python scripts/collect_chat.py collect
+python scripts/collect_chat.py diagnose --session M-YYYYMMDD-xxxxxxxx  # offline replay gate
+python scripts/collect_chat.py discard-session --session M-YYYYMMDD-xxxxxxxx  # technical failures only
+python scripts/collect_chat.py review
+python scripts/collect_chat.py status
 ```
 
 Run `collect` once per match. The command waits for the read-only Live Client
@@ -165,9 +166,9 @@ Do not use apparent toxicity when deciding which messages to retain.
 After the anonymized CSV is ready, label messages interactively:
 
 ```bash
-python label_final_test.py
-python label_final_test.py --start 50      # resume near a CSV row
-python label_final_test.py --relabel       # revisit already-labeled rows
+python scripts/label_final_test.py
+python scripts/label_final_test.py --start 50      # resume near a CSV row
+python scripts/label_final_test.py --relabel       # revisit already-labeled rows
 ```
 
 Type `0` (non-toxic) or `1` (toxic) for each line; `s` skips, `b` undoes the
@@ -175,21 +176,11 @@ previous label, `n` adds a note, `q` quits. Each change is saved immediately.
 
 ## Layout
 
-| File | Purpose |
+| Path | Purpose |
 | --- | --- |
-| `config.py` | Hyperparameters and paths shared across scripts. |
-| `dataset.py` | Cleaning, slang expansion, vocab, context windows, `DataLoader`s. |
-| `model.py` | `ToxicChatLSTM` architecture. |
-| `train.py` | Validation-F1 checkpointing, threshold selection, and frozen test evaluation. |
-| `hybrid.py` | Train-only TF-IDF LinearSVC late fusion with validation-tuned blend. |
-| `predict.py` | Interactive / one-shot terminal scorer for the frozen hybrid model. |
-| `label_final_test.py` | Terminal `0`/`1` labeler for `data/final_test/final_chat.csv`. |
-| `baseline.py` | scikit-learn TF-IDF + SVM baseline. |
-| `run_lstm_experiments.py` | Legacy single-message validation screen and frozen evaluation. |
-| `run_context_hybrid_experiments.py` | Context-window + hybrid screen, three-seed freeze, test once. |
-| `prepare_embeddings.py` | Optional vocabulary-aligned 100d GloVe initialization. |
-| `prepare_tribunal.py` | Converts raw Tribunal chat logs into a balanced `text,label` CSV. |
-| `prepare_l2dtnh.py` | Cleans expert labels, audits data quality, assigns grouped splits + `msg_index`. |
-| `generate_report_assets.py` | Generates report plots, diagrams, and qualitative examples. |
-| `colab_train.ipynb` | Colab workflow for GPU context/hybrid training. |
-| `collect_chat.py` | Calibrates, captures, reviews, and anonymizes fresh LoL chat using screen OCR. |
+| `toxic_chat/` | Importable library (`config`, `dataset`, `model`, `train`, `hybrid`, `baseline`). |
+| `scripts/` | CLI entry points (prepare, experiment runners, predict, collect, report helpers). |
+| `notebooks/` | Colab GPU training notebooks. |
+| `legacy_notebooks/` | Archived earlier Colab workflows. |
+| `tests/` | Pytest suite (imports `toxic_chat` + scripts via `conftest.py`). |
+| `data/`, `artifacts/`, `reports/` | Data, evidence, and LaTeX reports (unchanged at repo root). |

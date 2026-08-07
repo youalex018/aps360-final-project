@@ -16,8 +16,8 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit
 
-import config
-from dataset import clean_text
+from toxic_chat import config
+from toxic_chat.dataset import clean_text
 
 SOURCE_COLUMNS = ["message", "label", "chatlog_id"]
 ORDER_COLUMNS = ["time", "id"]

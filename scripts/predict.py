@@ -5,9 +5,9 @@ Resolves the validation-winning hybrid from
 alpha/threshold), falling back to ``artifacts/best_model.pt``. Score one line
 interactively, with ``--once``, or batch-score ``data/final_test/final_chat.csv``.
 
-python predict.py --once "gg ez mid diff" --show-tokens
-python predict.py --csv
-python predict.py --csv data/final_test/final_chat.csv --output artifacts/final_test/final_hybrid_predictions.csv
+python scripts/predict.py --once "gg ez mid diff" --show-tokens
+python scripts/predict.py --csv
+python scripts/predict.py --csv data/final_test/final_chat.csv --output artifacts/final_test/final_hybrid_predictions.csv
 """
 from __future__ import annotations
 
@@ -20,10 +20,10 @@ from pathlib import Path
 
 import torch
 
-import config
-from dataset import Vocab, clean_text, load_splits
-from hybrid import fit_lexical_scorer, fuse, svm_probabilities
-from train import build_model, experiment_config_from_dict
+from toxic_chat import config
+from toxic_chat.dataset import Vocab, clean_text, load_splits
+from toxic_chat.hybrid import fit_lexical_scorer, fuse, svm_probabilities
+from toxic_chat.train import build_model, experiment_config_from_dict
 
 FROZEN_HYBRID_CONFIG = config.ARTIFACTS_DIR / "frozen_context_hybrid_config.json"
 FROZEN_IMPROVED_HYBRID_CONFIG = (
@@ -196,7 +196,7 @@ def load_predictor(
     if not config.DATA_PATH.is_file():
         raise FileNotFoundError(
             f"Prepared dataset not found: {config.DATA_PATH}. "
-            "Run: python prepare_l2dtnh.py"
+            "Run: python scripts/prepare_l2dtnh.py"
         )
 
     if device_name is None:

@@ -6,9 +6,9 @@ memory, or assigns toxicity labels.
 
 Typical use:
 
-    python collect_chat.py calibrate
-    python collect_chat.py collect
-    python collect_chat.py review
+    python scripts/collect_chat.py calibrate
+    python scripts/collect_chat.py collect
+    python scripts/collect_chat.py review
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 FINAL_TEST_DIR = ROOT / "data" / "final_test"
 RAW_DIR = FINAL_TEST_DIR / "raw"
 CALIBRATION_PATH = RAW_DIR / "calibration.json"
@@ -452,7 +452,7 @@ def find_league_window(win32gui, hwnd: int | None = None) -> tuple[int, str]:
         raise RuntimeError(
             "League game window not found. Start a Practice Tool/custom game "
             "in borderless or windowed mode, then run calibrate again. "
-            "Use `python collect_chat.py list-windows` to inspect titles."
+            "Use `python scripts/collect_chat.py list-windows` to inspect titles."
         )
     _rank, _area, selected_hwnd, title = max(candidates)
     return selected_hwnd, title
@@ -513,14 +513,14 @@ def save_calibration(calibration: Calibration) -> None:
 
 def load_calibration() -> Calibration:
     if not CALIBRATION_PATH.exists():
-        raise RuntimeError("No calibration found. Run `python collect_chat.py calibrate`.")
+        raise RuntimeError("No calibration found. Run `python scripts/collect_chat.py calibrate`.")
     try:
         calibration = Calibration(
             **json.loads(CALIBRATION_PATH.read_text(encoding="utf-8"))
         )
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise RuntimeError(
-            "Calibration is invalid. Run `python collect_chat.py calibrate` again."
+            "Calibration is invalid. Run `python scripts/collect_chat.py calibrate` again."
         ) from exc
     ratios = (
         calibration.x_ratio,
@@ -1778,7 +1778,7 @@ def command_collect(args: argparse.Namespace) -> None:
         if state.failed:
             print("Session auto-marked discarded due to collector failure.")
         else:
-            print("Run `python collect_chat.py review` before assigning labels.")
+            print("Run `python scripts/collect_chat.py review` before assigning labels.")
 
 
 def session_directories(raw_dir: Path = RAW_DIR) -> list[Path]:

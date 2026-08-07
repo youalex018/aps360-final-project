@@ -20,7 +20,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-import config
+from toxic_chat import config
 
 DEFAULT_CSV = config.ROOT / "data" / "final_test" / "final_chat.csv"
 FIELDNAMES = ["match_id", "message_order", "text", "label", "notes"]

@@ -5,7 +5,7 @@ same splits, so their accuracies are directly comparable.
 """
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 TRIBUNAL_RAW_PATH = ROOT / "data" / "tribunal" / "chatlogs.csv"
 TRIBUNAL_PREPARED_PATH = ROOT / "data" / "tribunal" / "tribunal_chat_100k_balanced.csv"
 L2DTNH_RAW_PATH = ROOT / "data" / "l2dtnh" / "l2dtnh_english.csv"

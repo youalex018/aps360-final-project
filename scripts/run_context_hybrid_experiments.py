@@ -8,10 +8,10 @@ from pathlib import Path
 
 import numpy as np
 
-import config
-from baseline import run_baseline
-from hybrid import late_fuse_lstm_run
-from train import (
+from toxic_chat import config
+from toxic_chat.baseline import run_baseline
+from toxic_chat.hybrid import late_fuse_lstm_run
+from toxic_chat.train import (
     ExperimentConfig,
     evaluate_checkpoint,
     experiment_config_from_dict,

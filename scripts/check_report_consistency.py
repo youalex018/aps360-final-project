@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import re
 
-import config
+from toxic_chat import config
 
 
 def main() -> None:

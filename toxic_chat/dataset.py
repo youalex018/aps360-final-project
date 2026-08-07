@@ -14,7 +14,7 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader, Dataset
 
-import config
+from toxic_chat import config
 
 PAD_TOKEN, UNK_TOKEN = "<pad>", "<unk>"
 PAD_IDX, UNK_IDX = 0, 1
